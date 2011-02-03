@@ -26,19 +26,20 @@
 #include <linux/list.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
-#include "port_mgr.h"
-#include "abe_main.h"
+
+#include "abe.h"
+#include "abe_port.h"
 
 /* this must match logical ID numbers in port_mgr.h */
 static const char *lport_name[] = {
-		"dmic0", "dmic1", "dmic2", "pdmdl1", "pdmdl2", "pdmvib",
+		"dmic0", "dmic1", "dmic2", "pdmdl1", "pdmdl2", "mcasp",
 		"pdmul1", "bt_vx_dl", "bt_vx_ul", "mm_ext_ul", "mm_ext_dl",
-		"mm_dl1", "mm_ul1", "mm_ul2", "vx_dl", "vx_ul", "vib", "tones",
+		"mm_dl1", "mm_ul1", "mm_ul2", "vx_dl", "vx_ul", "tones",
 		"mm_dl_lp"
 };
 
 static DEFINE_MUTEX(port_mgr_mutex);
-static struct abe *the_abe = NULL;
+static struct omap_aess *the_abe = NULL;
 static int users = 0;
 
 /*
@@ -54,38 +55,36 @@ static int get_physical_id(int logical_id)
 	case OMAP_ABE_BE_PORT_DMIC0:
 	case OMAP_ABE_BE_PORT_DMIC1:
 	case OMAP_ABE_BE_PORT_DMIC2:
-		return DMIC_PORT;
+		return OMAP_ABE_DMIC_PORT;
 	case OMAP_ABE_BE_PORT_PDM_DL1:
 	case OMAP_ABE_BE_PORT_PDM_DL2:
-		return PDM_DL_PORT;
-	case OMAP_ABE_BE_PORT_PDM_VIB:
-		return VIB_DL_PORT;
+		return OMAP_ABE_PDM_DL_PORT;
+	case OMAP_ABE_BE_PORT_MCASP:
+		return OMAP_ABE_MCASP_DL_PORT;
 	case OMAP_ABE_BE_PORT_PDM_UL1:
-		return PDM_UL_PORT;
+		return OMAP_ABE_PDM_UL_PORT;
 	case OMAP_ABE_BE_PORT_BT_VX_DL:
-		return BT_VX_DL_PORT;
+		return OMAP_ABE_BT_VX_DL_PORT;
 	case OMAP_ABE_BE_PORT_BT_VX_UL:
-		return BT_VX_UL_PORT;
-	case OMAP_ABE_BE_PORT_MM_EXT_UL:
-		return MM_EXT_OUT_PORT;
+		return OMAP_ABE_BT_VX_UL_PORT;
 	case OMAP_ABE_BE_PORT_MM_EXT_DL:
-		return MM_EXT_IN_PORT;
+		return OMAP_ABE_MM_EXT_OUT_PORT;
+	case OMAP_ABE_BE_PORT_MM_EXT_UL:
+		return OMAP_ABE_MM_EXT_IN_PORT;
 	/* front end ports */
 	case OMAP_ABE_FE_PORT_MM_DL1:
 	case OMAP_ABE_FE_PORT_MM_DL_LP:
-		return MM_DL_PORT;
+		return OMAP_ABE_MM_DL_PORT;
 	case OMAP_ABE_FE_PORT_MM_UL1:
-		return MM_UL_PORT;
+		return OMAP_ABE_MM_UL_PORT;
 	case OMAP_ABE_FE_PORT_MM_UL2:
-		return MM_UL2_PORT;
+		return OMAP_ABE_MM_UL2_PORT;
 	case OMAP_ABE_FE_PORT_VX_DL:
-		return VX_DL_PORT;
+		return OMAP_ABE_VX_DL_PORT;
 	case OMAP_ABE_FE_PORT_VX_UL:
-		return VX_UL_PORT;
-	case OMAP_ABE_FE_PORT_VIB:
-		return VIB_DL_PORT;
+		return OMAP_ABE_VX_UL_PORT;
 	case OMAP_ABE_FE_PORT_TONES:
-		return TONES_DL_PORT;
+		return OMAP_ABE_TONES_DL_PORT;
 	}
 	return -EINVAL;
 }
@@ -94,7 +93,7 @@ static int get_physical_id(int logical_id)
  * Get the number of enabled users of the physical port shared by this client.
  * Locks held by callers.
  */
-static int port_get_num_users(struct abe *abe, struct omap_abe_port *port)
+static int port_get_num_users(struct omap_aess *abe, struct omap_abe_port *port)
 {
 	struct omap_abe_port *p;
 	int users = 0;
@@ -106,7 +105,7 @@ static int port_get_num_users(struct abe *abe, struct omap_abe_port *port)
 	return users;
 }
 
-static int port_is_open(struct abe *abe, int phy_port)
+static int port_is_open(struct omap_aess *abe, int phy_port)
 {
 	struct omap_abe_port *p;
 
@@ -121,7 +120,7 @@ static int port_is_open(struct abe *abe, int phy_port)
  * Check whether the physical port is enabled for this PHY port ID.
  * Locks held by callers.
  */
-int omap_abe_port_is_enabled(struct abe *abe, struct omap_abe_port *port)
+int omap_abe_port_is_enabled(struct omap_aess *abe, struct omap_abe_port *port)
 {
 	struct omap_abe_port *p;
 	unsigned long flags;
@@ -146,7 +145,7 @@ EXPORT_SYMBOL(omap_abe_port_is_enabled);
  * @abe -  ABE.
  * @port - logical ABE port ID to be enabled.
  */
-int omap_abe_port_enable(struct abe *abe, struct omap_abe_port *port)
+int omap_abe_port_enable(struct omap_aess *abe, struct omap_abe_port *port)
 {
 	int ret = 0;
 	unsigned long flags;
@@ -161,7 +160,7 @@ int omap_abe_port_enable(struct abe *abe, struct omap_abe_port *port)
 		/* enable the physical port */
 		pr_debug("port %s phy port %d enabled\n",
 			lport_name[port->logical_id], port->physical_id);
-		abe_enable_data_transfer(port->physical_id);
+		omap_aess_enable_data_transfer(abe, port->physical_id);
 	}
 
 	port->state = PORT_ENABLED;
@@ -177,7 +176,7 @@ EXPORT_SYMBOL(omap_abe_port_enable);
  * @abe -  ABE.
  * @port - logical ABE port ID to be disabled.
  */
-int omap_abe_port_disable(struct abe *abe, struct omap_abe_port *port)
+int omap_abe_port_disable(struct omap_aess *abe, struct omap_abe_port *port)
 {
 	int ret = 0;
 	unsigned long flags;
@@ -187,14 +186,13 @@ int omap_abe_port_disable(struct abe *abe, struct omap_abe_port *port)
 			lport_name[port->logical_id], port->users);
 
 	spin_lock_irqsave(&abe->lock, flags);
-	WARN(!port->users, "port %s phy port %d is already disabled\n",
-		lport_name[port->logical_id], port->physical_id);
+
 	if (port->users == 1 && port_get_num_users(abe, port) == 1) {
 		/* disable the physical port */
 		pr_debug("port %s phy port %d disabled\n",
 			lport_name[port->logical_id], port->physical_id);
 
-		abe_disable_data_transfer(port->physical_id);
+		omap_aess_disable_data_transfer(abe, port->physical_id);
 	}
 
 	port->state = PORT_DISABLED;
@@ -210,7 +208,7 @@ EXPORT_SYMBOL(omap_abe_port_disable);
  * @abe -  ABE.
  * @logical_id - logical ABE port ID to be opened.
  */
-struct omap_abe_port *omap_abe_port_open(struct abe *abe, int logical_id)
+struct omap_abe_port *omap_abe_port_open(struct omap_aess *abe, int logical_id)
 {
 	struct omap_abe_port *port;
 	unsigned long flags;
@@ -265,7 +263,7 @@ EXPORT_SYMBOL(omap_abe_port_open);
  *
  * @port - logical ABE port to be closed (and disabled).
  */
-void omap_abe_port_close(struct abe *abe, struct omap_abe_port *port)
+void omap_abe_port_close(struct omap_aess *abe, struct omap_abe_port *port)
 {
 	unsigned long flags;
 
@@ -281,11 +279,11 @@ void omap_abe_port_close(struct abe *abe, struct omap_abe_port *port)
 }
 EXPORT_SYMBOL(omap_abe_port_close);
 
-static struct abe *omap_abe_port_mgr_init(void)
+static struct omap_aess *omap_abe_port_mgr_init(void)
 {
-	struct abe *abe;
+	struct omap_aess *abe;
 
-	abe = kzalloc(sizeof(struct abe), GFP_KERNEL);
+	abe = kzalloc(sizeof(struct omap_aess), GFP_KERNEL);
 	if (abe == NULL)
 		return NULL;
 
@@ -303,7 +301,7 @@ static struct abe *omap_abe_port_mgr_init(void)
 	return abe;
 }
 
-static void omap_abe_port_mgr_free(struct abe *abe)
+static void omap_abe_port_mgr_free(struct omap_aess *abe)
 {
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(abe->debugfs_root);
@@ -312,9 +310,9 @@ static void omap_abe_port_mgr_free(struct abe *abe)
 	the_abe = NULL;
 }
 
-struct abe *omap_abe_port_mgr_get(void)
+struct omap_aess *omap_abe_port_mgr_get(void)
 {
-	struct abe * abe;
+	struct omap_aess * abe;
 
 	mutex_lock(&port_mgr_mutex);
 
@@ -329,7 +327,7 @@ struct abe *omap_abe_port_mgr_get(void)
 }
 EXPORT_SYMBOL(omap_abe_port_mgr_get);
 
-void omap_abe_port_mgr_put(struct abe *abe)
+void omap_abe_port_mgr_put(struct omap_aess *abe)
 {
 	mutex_lock(&port_mgr_mutex);
 
