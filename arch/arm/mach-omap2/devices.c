@@ -125,6 +125,8 @@ static struct platform_device omap2cam_device = {
 };
 #endif
 
+static struct isp_platform_data bogus_isp_pdata;
+
 #if defined(CONFIG_IOMMU_API)
 
 #include <plat/iommu.h>
@@ -215,6 +217,11 @@ static struct platform_device omap3isp_device = {
 
 static struct omap_iommu_arch_data omap3_isp_iommu = {
 	.name = "isp",
+};
+
+struct isp_platform_data {
+	struct isp_v4l2_subdevs_group *subdevs;
+	void (*set_constraints)(struct isp_device *isp, bool enable);
 };
 
 int omap3_init_camera(struct isp_platform_data *pdata)
@@ -636,7 +643,7 @@ static int __init omap2_init_devices(void)
 	 * in alphabetical order so they're easier to sort through.
 	 */
 	omap_init_audio();
-	omap_init_camera();
+	omap3_init_camera(&bogus_isp_pdata);
 	omap_init_hdmi_audio();
 	omap_init_mbox();
 	/* If dtb is there, the devices will be created dynamically */
