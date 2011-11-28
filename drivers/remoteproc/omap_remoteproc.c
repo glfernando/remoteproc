@@ -137,12 +137,6 @@ static int omap_rproc_start(struct rproc *rproc)
 		goto put_mbox;
 	}
 
-	ret = pdata->device_enable(pdev);
-	if (ret) {
-		dev_err(rproc->dev, "omap_device_enable failed: %d\n", ret);
-		goto put_mbox;
-	}
-
 	return 0;
 
 put_mbox:
@@ -153,14 +147,7 @@ put_mbox:
 /* power off the remote processor */
 static int omap_rproc_stop(struct rproc *rproc)
 {
-	struct platform_device *pdev = to_platform_device(rproc->dev);
-	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
 	struct omap_rproc *oproc = rproc->priv;
-	int ret;
-
-	ret = pdata->device_shutdown(pdev);
-	if (ret)
-		return ret;
 
 	omap_mbox_put(oproc->mbox, &oproc->nb);
 
