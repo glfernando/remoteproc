@@ -40,6 +40,7 @@
 #include <linux/virtio_ids.h>
 #include <linux/virtio_ring.h>
 #include <asm/byteorder.h>
+#include <linux/pm_runtime.h>
 
 #include "remoteproc_internal.h"
 
@@ -1065,12 +1066,21 @@ static int rproc_fw_boot(struct rproc *rproc, const struct firmware *fw)
 		goto clean_up;
 	}
 
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0) {
+		dev_err(dev, "error pm_runtime_get_sync %s: %d\n",
+							rproc->name,  ret);
+		goto stop_rproc;
+	}
+
 	rproc->state = RPROC_RUNNING;
 
 	dev_info(dev, "remote processor %s is now up\n", rproc->name);
 
 	return 0;
 
+stop_rproc:
+	rproc->ops->stop(rproc);
 clean_up:
 	rproc_resource_cleanup(rproc);
 	rproc_disable_iommu(rproc);
@@ -1222,6 +1232,13 @@ void rproc_shutdown(struct rproc *rproc)
 	/* if the remote proc is still needed, bail out */
 	if (!atomic_dec_and_test(&rproc->power))
 		goto out;
+
+	ret = pm_runtime_put_sync(dev);
+	if (ret < 0) {
+		dev_err(dev, "error pm_runtime_put_sync %s: %d\n",
+							rproc->name,  ret);
+		goto out;
+	}
 
 	/* power off the remote processor */
 	ret = rproc->ops->stop(rproc);
