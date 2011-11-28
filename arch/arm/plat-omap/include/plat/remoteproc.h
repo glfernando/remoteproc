@@ -28,8 +28,6 @@ struct platform_device;
  * @firmware: name of firmware file to load
  * @mbox_name: name of omap mailbox device to use with this rproc
  * @ops: start/stop rproc handlers
- * @device_enable: omap-specific handler for enabling a device
- * @device_shutdown: omap-specific handler for shutting down a device
  */
 struct omap_rproc_pdata {
 	const char *name;
@@ -38,8 +36,6 @@ struct omap_rproc_pdata {
 	const char *firmware;
 	const char *mbox_name;
 	const struct rproc_ops *ops;
-	int (*device_enable) (struct platform_device *pdev);
-	int (*device_shutdown) (struct platform_device *pdev);
 };
 
 #if defined(CONFIG_OMAP_REMOTEPROC) || defined(CONFIG_OMAP_REMOTEPROC_MODULE)

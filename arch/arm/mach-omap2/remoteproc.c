@@ -55,9 +55,23 @@ static struct omap_iommu_arch_data omap4_rproc_iommu[] = {
 	{ .name = "ducati" },
 };
 
+/*
+ * As the OMAP remoteprocs share the clock with their iommu's,
+ * in needs to be put under reset in order to deactiavte it
+ */
+static int omap2_rproc_deactivate(struct omap_device *od)
+{
+	int i;
+
+	for (i = 0; i < od->hwmods_cnt; i++)
+		omap_hwmod_shutdown(od->hwmods[i]);
+
+	return 0;
+}
+
 static struct omap_device_pm_latency omap_rproc_latency[] = {
 	{
-		.deactivate_func = omap_device_idle_hwmods,
+		.deactivate_func = omap2_rproc_deactivate,
 		.activate_func = omap_device_enable_hwmods,
 		.flags = OMAP_DEVICE_LATENCY_AUTO_ADJUST,
 	},
@@ -121,9 +135,6 @@ static int __init omap_rproc_init(void)
 			}
 			oh_count++;
 		}
-
-		omap4_rproc_data[i].device_enable = omap_device_enable;
-		omap4_rproc_data[i].device_shutdown = omap_device_shutdown;
 
 		device_initialize(&pdev->dev);
 
