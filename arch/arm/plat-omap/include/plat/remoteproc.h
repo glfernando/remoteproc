@@ -27,6 +27,9 @@ struct platform_device;
  * @oh_name_opt: optional, secondary omap hwmod device
  * @firmware: name of firmware file to load
  * @mbox_name: name of omap mailbox device to use with this rproc
+ * @idle_addr: physical address of the idle register
+ * @idle_mask: mask of the idle register
+ * @suspend_timeout: max timeout waiting for suspend request respond
  * @ops: start/stop rproc handlers
  */
 struct omap_rproc_pdata {
@@ -35,6 +38,9 @@ struct omap_rproc_pdata {
 	const char *oh_name_opt;
 	const char *firmware;
 	const char *mbox_name;
+	u32 idle_addr;
+	u32 idle_mask;
+	unsigned long suspend_timeout;
 	const struct rproc_ops *ops;
 };
 

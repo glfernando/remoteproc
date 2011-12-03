@@ -56,6 +56,14 @@
  *
  * @RP_MBOX_ABORT_REQUEST: a "please crash" request, used for testing the
  * recovery mechanism (to some extent).
+ *
+ * @RP_MBOX_SUSPEND: suspend request for the remote processor
+ *
+ * @RP_MBOX_SUSPEND_FORCED: forced suspend for system suspend request
+ *
+ * @RP_MBOX_SUSPEND_ACK: remote processor acked suspend request
+ *
+ * @P_MBOX_SUSPEND_CANCEL: remote processor canceled suspend request
  */
 enum omap_rp_mbox_messages {
 	RP_MBOX_READY		= 0xFFFFFF00,
@@ -64,6 +72,10 @@ enum omap_rp_mbox_messages {
 	RP_MBOX_ECHO_REQUEST	= 0xFFFFFF03,
 	RP_MBOX_ECHO_REPLY	= 0xFFFFFF04,
 	RP_MBOX_ABORT_REQUEST	= 0xFFFFFF05,
+	RP_MBOX_SUSPEND		= 0xFFFFFF10,
+	RP_MBOX_SUSPEND_FORCED	= 0xFFFFFF11,
+	RP_MBOX_SUSPEND_ACK	= 0xFFFFFF12,
+	RP_MBOX_SUSPEND_CANCEL	= 0xFFFFFF13,
 };
 
 #endif /* _OMAP_RPMSG_H */
