@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/err.h>
+#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/remoteproc.h>
@@ -34,16 +35,34 @@
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
 
+#define DEF_SUSPEND_TIMEOUT 1000
+
 /**
  * struct omap_rproc - omap remote processor state
  * @mbox: omap mailbox handle
  * @nb: notifier block that will be invoked on inbound mailbox messages
  * @rproc: rproc handle
+ * @pm_comp: completion needed for suspend respond
+ * @idle: address to the idle register
+ * @idle_mask: mask of the idle register
+ * @suspend_timeout: max time it can wait for the suspend respond
+ * @suspend_acked: flag that says if the suspend request was acked
+ * @suspended: flag that says if remoteproc is suspended
+ * @pm_lock: lock to protect suspended variable
+ * @suspend_comp: completion used to block kick in case of suspend
  */
 struct omap_rproc {
 	struct omap_mbox *mbox;
 	struct notifier_block nb;
 	struct rproc *rproc;
+	struct completion pm_comp;
+	void *idle;
+	u32 idle_mask;
+	unsigned long suspend_timeout;
+	bool suspend_acked;
+	bool suspended;
+	struct mutex pm_lock;
+	struct completion suspend_comp;
 };
 
 /**
@@ -79,6 +98,11 @@ static int omap_rproc_mbox_callback(struct notifier_block *this,
 	case RP_MBOX_ECHO_REPLY:
 		dev_info(dev, "received echo reply from %s\n", name);
 		break;
+	case RP_MBOX_SUSPEND_ACK:
+	case RP_MBOX_SUSPEND_CANCEL:
+		oproc->suspend_acked = msg == RP_MBOX_SUSPEND_ACK;
+		complete(&oproc->pm_comp);
+		break;
 	default:
 		/* msg contains the index of the triggered vring */
 		if (rproc_vq_interrupt(oproc->rproc, msg) == IRQ_NONE)
@@ -94,20 +118,25 @@ static void omap_rproc_kick(struct rproc *rproc, int vqid)
 	struct omap_rproc *oproc = rproc->priv;
 	int ret;
 
+	mutex_lock(&oproc->pm_lock);
+	/* if suspended wait for resume */
+	while (oproc->suspended) {
+		init_completion(&oproc->suspend_comp);
+		mutex_unlock(&oproc->pm_lock);
+		ret = wait_for_completion_interruptible(&oproc->suspend_comp);
+		if (WARN_ON(ret))
+			return;
+
+		mutex_lock(&oproc->pm_lock);
+	}
 	/* send the index of the triggered virtqueue in the mailbox payload */
 	ret = omap_mbox_msg_send(oproc->mbox, vqid);
 	if (ret)
 		dev_err(&rproc->dev, "omap_mbox_msg_send failed: %d\n", ret);
+	mutex_unlock(&oproc->pm_lock);
 }
 
-/*
- * Power up the remote processor.
- *
- * This function will be invoked only after the firmware for this rproc
- * was loaded, parsed successfully, and all of its resource requirements
- * were met.
- */
-static int omap_rproc_start(struct rproc *rproc)
+static int _rproc_start(struct rproc *rproc)
 {
 	struct omap_rproc *oproc = rproc->priv;
 	struct device *dev = rproc->dev.parent;
@@ -125,19 +154,6 @@ static int omap_rproc_start(struct rproc *rproc)
 		return ret;
 	}
 
-	/*
-	 * Ping the remote processor. this is only for sanity-sake;
-	 * there is no functional effect whatsoever.
-	 *
-	 * Note that the reply will _not_ arrive immediately: this message
-	 * will wait in the mailbox fifo until the remote processor is booted.
-	 */
-	ret = omap_mbox_msg_send(oproc->mbox, RP_MBOX_ECHO_REQUEST);
-	if (ret) {
-		dev_err(dev, "omap_mbox_get failed: %d\n", ret);
-		goto put_mbox;
-	}
-
 	ret = pdata->device_enable(pdev);
 	if (ret) {
 		dev_err(dev, "omap_device_enable failed: %d\n", ret);
@@ -148,6 +164,37 @@ static int omap_rproc_start(struct rproc *rproc)
 
 put_mbox:
 	omap_mbox_put(oproc->mbox, &oproc->nb);
+	return ret;
+}
+
+/*
+ * Power up the remote processor.
+ *
+ * This function will be invoked only after the firmware for this rproc
+ * was loaded, parsed successfully, and all of its resource requirements
+ * were met.
+ */
+static int omap_rproc_start(struct rproc *rproc)
+{
+	struct omap_rproc *oproc = rproc->priv;
+	struct device *dev = rproc->dev.parent;
+	int ret;
+
+	ret = _rproc_start(rproc);
+	if (ret)
+		return ret;
+
+	/*
+	 * Ping the remote processor. this is only for sanity-sake;
+	 * there is no functional effect whatsoever.
+	 *
+	 * Note that the reply will _not_ arrive immediately: this message
+	 * will wait in the mailbox fifo until the remote processor is booted.
+	 */
+	ret = omap_mbox_msg_send(oproc->mbox, RP_MBOX_ECHO_REQUEST);
+	if (ret)
+		dev_err(dev, "omap_mbox_msg_send failed: %d\n", ret);
+
 	return ret;
 }
 
@@ -169,10 +216,94 @@ static int omap_rproc_stop(struct rproc *rproc)
 	return 0;
 }
 
+static bool _rproc_idled(struct omap_rproc *oproc)
+{
+	return !oproc->idle || readl(oproc->idle) & oproc->idle_mask;
+}
+
+static int _suspend(struct rproc *rproc, bool auto_suspend)
+{
+	struct omap_rproc *oproc = rproc->priv;
+	unsigned long to = msecs_to_jiffies(oproc->suspend_timeout);
+	unsigned long ta = jiffies + to;
+	int ret;
+
+	mutex_lock(&oproc->pm_lock);
+	init_completion(&oproc->pm_comp);
+
+	omap_mbox_msg_send(oproc->mbox,
+			auto_suspend ? RP_MBOX_SUSPEND : RP_MBOX_SUSPEND_FORCED);
+	ret = wait_for_completion_timeout(&oproc->pm_comp, to);
+	if (!oproc->suspend_acked) {
+		ret = -EBUSY;
+		goto err;
+	}
+
+	/*
+	 * FIXME: DUcati side is returning the ACK message before saving the
+	 * context, becuase the function which saves the context is a
+	 * SYSBIOS function that can not be modified until a new SYSBIOS
+	 * release is done. However, we can know that Ducati already saved
+	 * the context once it reaches idle again (after saving the context
+	 * ducati executes WFI instruction), so this way we can workaround
+	 * this problem.
+	 */
+	while (!_rproc_idled(oproc)) {
+		if (time_after(jiffies, ta)) {
+			ret = -ETIME;
+			goto err;
+		}
+		schedule();
+	}
+
+	oproc->suspended = true;
+	mutex_unlock(&oproc->pm_lock);
+
+	ret = omap_rproc_stop(rproc);
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	oproc->suspended = false;
+	complete_all(&oproc->suspend_comp);
+	mutex_unlock(&oproc->pm_lock);
+	return ret;
+}
+
+static int omap_rproc_suspend(struct rproc *rproc, bool auto_suspend)
+{
+	struct omap_rproc *oproc = rproc->priv;
+
+	if (!auto_suspend || _rproc_idled(oproc))
+		return _suspend(rproc, auto_suspend);
+
+	return -EBUSY;
+}
+
+static int omap_rproc_resume(struct rproc *rproc, bool auto_suspend)
+{
+	struct omap_rproc *oproc = rproc->priv;
+	int ret;
+
+	ret = _rproc_start(rproc);
+	if (ret)
+		return ret;
+
+	mutex_lock(&oproc->pm_lock);
+	oproc->suspended = false;
+	complete_all(&oproc->suspend_comp);
+	mutex_unlock(&oproc->pm_lock);
+
+	return 0;
+}
+
 static struct rproc_ops omap_rproc_ops = {
 	.start		= omap_rproc_start,
 	.stop		= omap_rproc_stop,
 	.kick		= omap_rproc_kick,
+	.suspend	= omap_rproc_suspend,
+	.resume		= omap_rproc_resume,
 };
 
 static int __devinit omap_rproc_probe(struct platform_device *pdev)
@@ -195,6 +326,15 @@ static int __devinit omap_rproc_probe(struct platform_device *pdev)
 
 	oproc = rproc->priv;
 	oproc->rproc = rproc;
+	oproc->suspend_timeout = pdata->suspend_timeout ? : DEF_SUSPEND_TIMEOUT;
+	init_completion(&oproc->pm_comp);
+	init_completion(&oproc->suspend_comp);
+	mutex_init(&oproc->pm_lock);
+
+	if (pdata->idle_addr) {
+		oproc->idle = ioremap(pdata->idle_addr, sizeof(u32));
+		oproc->idle_mask = pdata->idle_mask;
+	}
 
 	platform_set_drvdata(pdev, rproc);
 
@@ -205,6 +345,8 @@ static int __devinit omap_rproc_probe(struct platform_device *pdev)
 	return 0;
 
 free_rproc:
+	if (oproc->idle)
+		iounmap(oproc->idle);
 	rproc_free(rproc);
 	return ret;
 }

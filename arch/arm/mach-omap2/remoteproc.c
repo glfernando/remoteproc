@@ -26,6 +26,12 @@
 #include <plat/remoteproc.h>
 #include <plat/iommu.h>
 
+#include "cm2_44xx.h"
+#include "cm-regbits-44xx.h"
+
+#define OMAP4430_CM_M3_M3_CLKCTRL (OMAP4430_CM2_BASE + OMAP4430_CM2_CORE_INST \
+		+ OMAP4_CM_DUCATI_DUCATI_CLKCTRL_OFFSET)
+
 /*
  * Temporarily define the CMA base address explicitly.
  *
@@ -48,6 +54,8 @@ static struct omap_rproc_pdata omap4_rproc_data[] = {
 		.firmware	= "ducati-m3-core0.xem3",
 		.mbox_name	= "mailbox-1",
 		.oh_name	= "ipu_c0",
+		.idle_addr	= OMAP4430_CM_M3_M3_CLKCTRL,
+		.idle_mask	= OMAP4430_STBYST_MASK,
 	},
 };
 
