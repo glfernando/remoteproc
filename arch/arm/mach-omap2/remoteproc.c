@@ -28,6 +28,25 @@
 
 #include "control.h"
 
+#include "cm1_44xx.h"
+#include "cm2_44xx.h"
+#include "cm-regbits-44xx.h"
+
+/*
+ * CLKCTRL register will be used as idle register, due to the bit 18 is
+ * STBYST bit:
+ * Read 0x0: Module is functional (not in standby)
+ * Read 0x1: Module is in standby
+ *
+ * standby state is reached every time the remoteproc executes WFI instruction.
+ */
+#define OMAP4430_CM_M3_M3_CLKCTRL (OMAP4430_CM2_BASE + OMAP4430_CM2_CORE_INST \
+		+ OMAP4_CM_DUCATI_DUCATI_CLKCTRL_OFFSET)
+
+#define OMAP4430_CM_DSP_DSP_CLKCTRL (OMAP4430_CM1_BASE \
+		+ OMAP4430_CM1_TESLA_INST + OMAP4_CM_TESLA_TESLA_CLKCTRL_OFFSET)
+
+
 /*
  * Temporarily define the CMA base address explicitly.
  *
@@ -54,6 +73,8 @@ static struct omap_rproc_pdata omap4_rproc_data[] = {
 		.assert_reset	= omap_device_assert_hardreset,
 		.deassert_reset	= omap_device_deassert_hardreset,
 		.set_bootaddr	= omap_ctrl_write_dsp_boot_addr,
+		.idle_addr	= OMAP4430_CM_DSP_DSP_CLKCTRL,
+		.idle_mask	= OMAP4430_STBYST_MASK,
 	},
 	{
 		.name		= "ipu_c0",
@@ -62,6 +83,8 @@ static struct omap_rproc_pdata omap4_rproc_data[] = {
 		.oh_name	= "ipu",
 		.assert_reset	= omap_device_assert_hardreset,
 		.deassert_reset	= omap_device_deassert_hardreset,
+		.idle_addr	= OMAP4430_CM_M3_M3_CLKCTRL,
+		.idle_mask	= OMAP4430_STBYST_MASK,
 	},
 };
 
