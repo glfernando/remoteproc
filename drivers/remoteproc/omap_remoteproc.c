@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/err.h>
+#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/remoteproc.h>
@@ -38,6 +39,8 @@
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
 
+#define DEF_SUSPEND_TIMEOUT 1000
+
 /**
  * struct omap_rproc - omap remote processor state
  * @mbox: omap mailbox handle
@@ -45,6 +48,13 @@
  * @rproc: rproc handle
  * @boot_reg: virtual address of the register where the bootaddr is stored
  * @qos_req: for requesting latency constraints for rproc
+ * @pm_comp: completion needed for suspend respond
+ * @idle: address to the idle register
+ * @idle_mask: mask of the idle register
+ * @suspend_timeout: max time it can wait for the suspend respond
+ * @suspend_acked: flag that says if the suspend request was acked
+ * @suspended: flag that says if rproc suspended
+ * @need_kick: flag that says if vrings need to be kicked on resume
  */
 struct omap_rproc {
 	struct omap_mbox *mbox;
@@ -53,6 +63,13 @@ struct omap_rproc {
 	void __iomem *boot_reg;
 	struct dev_pm_qos_request qos_req;
 	atomic_t thrd_cnt;
+	struct completion pm_comp;
+	void *idle;
+	u32 idle_mask;
+	unsigned long suspend_timeout;
+	bool suspend_acked;
+	bool suspended;
+	bool need_kick;
 };
 
 struct _thread_data {
@@ -107,6 +124,11 @@ static int omap_rproc_mbox_callback(struct notifier_block *this,
 	case RP_MBOX_ECHO_REPLY:
 		dev_info(dev, "received echo reply from %s\n", name);
 		break;
+	case RP_MBOX_SUSPEND_ACK:
+	case RP_MBOX_SUSPEND_CANCEL:
+		oproc->suspend_acked = msg == RP_MBOX_SUSPEND_ACK;
+		complete(&oproc->pm_comp);
+		break;
 	default:
 		if (msg >= RP_MBOX_END_MSG) {
 			dev_info(dev, "Dropping unknown message %x", msg);
@@ -132,6 +154,11 @@ static void omap_rproc_kick(struct rproc *rproc, int vqid)
 	struct device *dev = oproc->rproc->dev.parent;
 	int ret;
 
+	/* if suspended set need kick flag to kick on resume */
+	if (oproc->suspended) {
+		oproc->need_kick = true;
+		return;
+	}
 	/* send the index of the triggered virtqueue in the mailbox payload */
 	ret = omap_mbox_msg_send(oproc->mbox, vqid);
 	if (ret)
@@ -294,10 +321,98 @@ static int omap_rproc_stop(struct rproc *rproc)
 	return 0;
 }
 
+static bool _rproc_idled(struct omap_rproc *oproc)
+{
+	return !oproc->idle || readl(oproc->idle) & oproc->idle_mask;
+}
+
+static int _suspend(struct rproc *rproc, bool auto_suspend)
+{
+	struct device *dev = rproc->dev.parent;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct omap_rproc_pdata *pdata = dev->platform_data;
+	struct omap_rproc *oproc = rproc->priv;
+	unsigned long to = msecs_to_jiffies(oproc->suspend_timeout);
+	unsigned long ta = jiffies + to;
+	int ret;
+
+	init_completion(&oproc->pm_comp);
+	oproc->suspend_acked = false;
+	omap_mbox_msg_send(oproc->mbox,
+			auto_suspend ? RP_MBOX_SUSPEND : RP_MBOX_SUSPEND_FORCED);
+	ret = wait_for_completion_timeout(&oproc->pm_comp, to);
+	if (!oproc->suspend_acked)
+		return -EBUSY;
+
+	/*
+	 * FIXME: Ducati side is returning the ACK message before saving the
+	 * context, becuase the function which saves the context is a
+	 * SYSBIOS function that can not be modified until a new SYSBIOS
+	 * release is done. However, we can know that Ducati already saved
+	 * the context once it reaches idle again (after saving the context
+	 * ducati executes WFI instruction), so this way we can workaround
+	 * this problem.
+	 */
+	while (!_rproc_idled(oproc)) {
+		if (time_after(jiffies, ta))
+			return -ETIME;
+		schedule();
+	}
+
+	ret = pdata->device_shutdown(pdev);
+	if (ret)
+		return ret;
+
+	/* release all reasources not needed while rproc is off */
+	/* FIXME: call mbox disable api when available */
+
+	oproc->suspended = true;
+
+	return 0;
+}
+
+static int omap_rproc_suspend(struct rproc *rproc, bool auto_suspend)
+{
+	struct omap_rproc *oproc = rproc->priv;
+
+	if (auto_suspend && !_rproc_idled(oproc))
+		return -EBUSY;
+
+	return _suspend(rproc, auto_suspend);
+}
+static int _resume_kick(int id, void *p, void *rproc)
+{
+	omap_rproc_kick(rproc, id);
+	return 0;
+}
+
+static int omap_rproc_resume(struct rproc *rproc)
+{
+	struct device *dev = rproc->dev.parent;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct omap_rproc_pdata *pdata = dev->platform_data;
+	struct omap_rproc *oproc = rproc->priv;
+
+	/* enable all resoruces before starting rproc */
+	/* FIXME: call mbox enable api when available */
+
+	if (oproc->boot_reg)
+		writel(rproc->bootaddr, oproc->boot_reg);
+
+	oproc->suspended = false;
+	if (oproc->need_kick) {
+		idr_for_each(&rproc->notifyids, _resume_kick, rproc);
+		oproc->need_kick = false;
+	}
+	return pdata->device_enable(pdev);
+}
+
 static struct rproc_ops omap_rproc_ops = {
 	.start		= omap_rproc_start,
 	.stop		= omap_rproc_stop,
 	.kick		= omap_rproc_kick,
+	.suspend	= omap_rproc_suspend,
+	.resume		= omap_rproc_resume,
 	.set_latency	= omap_rproc_set_latency,
 	.set_bandwidth	= omap_rproc_set_bandwidth,
 	.set_frequency	= omap_rproc_set_frequency,
@@ -323,6 +438,15 @@ static int __devinit omap_rproc_probe(struct platform_device *pdev)
 
 	oproc = rproc->priv;
 	oproc->rproc = rproc;
+	oproc->suspend_timeout = pdata->suspend_timeout ? : DEF_SUSPEND_TIMEOUT;
+	init_completion(&oproc->pm_comp);
+
+	if (pdata->idle_addr) {
+		oproc->idle = ioremap(pdata->idle_addr, sizeof(u32));
+		if (!oproc->idle)
+			goto err_ioremap;
+		oproc->idle_mask = pdata->idle_mask;
+	}
 
 	if (pdata->boot_reg) {
 		oproc->boot_reg = ioremap(pdata->boot_reg, sizeof(u32));
@@ -345,6 +469,8 @@ static int __devinit omap_rproc_probe(struct platform_device *pdev)
 remove_req:
 	dev_pm_qos_remove_request(&oproc->qos_req);
 free_rproc:
+	if (oproc->idle)
+		iounmap(oproc->idle);
 	if (oproc->boot_reg)
 		iounmap(oproc->boot_reg);
 err_ioremap:
@@ -356,6 +482,9 @@ static int __devexit omap_rproc_remove(struct platform_device *pdev)
 {
 	struct rproc *rproc = platform_get_drvdata(pdev);
 	struct omap_rproc *oproc = rproc->priv;
+
+	if (oproc->idle)
+                iounmap(oproc->idle);
 
 	if (oproc->boot_reg)
 		iounmap(oproc->boot_reg);
