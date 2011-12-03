@@ -149,11 +149,15 @@ struct rproc;
  * @start:	power on the device and boot it
  * @stop:	power off the device
  * @kick:	kick a virtqueue (virtqueue id given as a parameter)
+ * @suspend	suspend callback (suspend set to true if system suspend)
+ * @resume	resume callback
  */
 struct rproc_ops {
 	int (*start)(struct rproc *rproc);
 	int (*stop)(struct rproc *rproc);
 	void (*kick)(struct rproc *rproc, int vqid);
+	int (*suspend)(struct rproc *rproc, bool suspend);
+	int (*resume)(struct rproc *rproc);
 };
 
 /**
@@ -260,5 +264,8 @@ static inline struct rproc *vdev_to_rproc(struct virtio_device *vdev)
 
 	return rvdev->rproc;
 }
+
+extern const struct dev_pm_ops rproc_gen_pm_ops;
+#define GENERIC_RPROC_PM_OPS   (&rproc_gen_pm_ops)
 
 #endif /* REMOTEPROC_H */

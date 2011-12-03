@@ -40,6 +40,7 @@
 #include <linux/virtio_ids.h>
 #include <linux/virtio_ring.h>
 #include <linux/pm_runtime.h>
+#include <linux/platform_device.h>
 
 #include "remoteproc_internal.h"
 
@@ -64,6 +65,105 @@ static DEFINE_KLIST(rprocs, klist_rproc_get, klist_rproc_put);
 
 typedef int (*rproc_handle_resources_t)(struct rproc *rproc,
 				struct fw_resource *rsc, int len);
+
+static int rproc_resume(struct device *dev)
+{
+	dev_dbg(dev, "Enter %s\n", __func__);
+	return 0;
+}
+
+static int rproc_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct rproc *rproc = platform_get_drvdata(pdev);
+	int ret = 0;
+
+	dev_dbg(dev, "Enter %s\n", __func__);
+
+	/* if already suspended do nothing */
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	/* suspend remoteproc before turning off any device */
+	ret = rproc->ops->suspend(rproc, true);
+	if (ret)
+		goto err;
+
+	rproc->state = RPROC_SUSPENDED;
+
+	return 0;
+err:
+	dev_err(dev, "suspend failed %d\n", ret);
+	return ret;
+}
+
+static int rproc_runtime_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct rproc *rproc = platform_get_drvdata(pdev);
+	int ret = 0;
+
+	dev_dbg(dev, "Enter %s\n", __func__);
+
+	if (rproc->state != RPROC_SUSPENDED)
+		return ret;
+
+	if (rproc->ops->resume)
+		ret = rproc->ops->resume(rproc);
+
+	if (!ret)
+		rproc->state = RPROC_RUNNING;
+	else
+		dev_err(dev, "resume failed %d\n", ret);
+
+	return ret;
+}
+
+
+static int rproc_runtime_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct rproc *rproc = platform_get_drvdata(pdev);
+	int ret = 0;
+
+	dev_dbg(dev, "Enter %s\n", __func__);
+
+	if (rproc->state != RPROC_RUNNING)
+		return 0;
+
+	if (rproc->ops->suspend)
+		ret = rproc->ops->suspend(rproc, false);
+	/*
+	 * If it fails with -EBUSY/EAGAIN, remote processor is still running,
+	 * so lets abort suspend. If it is a different error it means there is
+	 * something wrong with the remote processor. Returning that error to
+	 * pm runtime framework will disable autosuspend.
+	 */
+	if (ret) {
+		dev_dbg(dev, "suspend aborted by remote processor %d\n", ret);
+		if (ret != -EBUSY  && ret != -EAGAIN)
+			dev_err(dev, "low level suspend error %d\n", ret);
+		goto abort;
+	}
+	rproc->state = RPROC_SUSPENDED;
+
+	return 0;
+abort:
+	return ret;
+}
+
+static int rproc_runtime_idle(struct device *dev)
+{
+	dev_dbg(dev, "Enter %s\n", __func__);
+	return 0;
+}
+
+const struct dev_pm_ops rproc_gen_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(rproc_suspend, rproc_resume)
+	SET_RUNTIME_PM_OPS(rproc_runtime_suspend, rproc_runtime_resume,
+				rproc_runtime_idle)
+};
+EXPORT_SYMBOL(rproc_gen_pm_ops);
 
 /*
  * This is the IOMMU fault handler we register with the IOMMU API
@@ -1102,6 +1202,9 @@ void rproc_shutdown(struct rproc *rproc)
 	if (!atomic_dec_and_test(&rproc->power))
 		goto out;
 
+	/* set the new state first to avoid saving context */
+	rproc->state = RPROC_OFFLINE;
+
 	ret = pm_runtime_put_sync(dev);
 	if (ret < 0) {
 		dev_err(dev, "error pm_runtime_put_sync %s: %d\n",
@@ -1122,14 +1225,14 @@ void rproc_shutdown(struct rproc *rproc)
 
 	rproc_disable_iommu(rproc);
 
-	rproc->state = RPROC_OFFLINE;
-
 	dev_info(dev, "stopped remote processor %s\n", rproc->name);
 
 out:
 	mutex_unlock(&rproc->lock);
 	if (!ret)
 		module_put(dev->driver->owner);
+	else
+		rproc->state = RPROC_RUNNING;
 }
 EXPORT_SYMBOL(rproc_shutdown);
 
