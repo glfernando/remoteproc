@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/err.h>
+#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <linux/remoteproc.h>
@@ -34,16 +35,28 @@
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
 
+#define DEF_SUSPEND_TIMEOUT 1000
+
 /**
  * struct omap_rproc - omap remote processor state
  * @mbox: omap mailbox handle
  * @nb: notifier block that will be invoked on inbound mailbox messages
  * @rproc: rproc handle
+ * @pm_comp: completion needed for suspend respond
+ * @idle: address to the idle register
+ * @idle_mask: mask of the idle register
+ * @suspend_timeout: max time it can wait for the suspend respond
+ * @suspend_acked: flag that says if the suspend request was acked
  */
 struct omap_rproc {
 	struct omap_mbox *mbox;
 	struct notifier_block nb;
 	struct rproc *rproc;
+	struct completion pm_comp;
+	void *idle;
+	u32 idle_mask;
+	unsigned long suspend_timeout;
+	bool suspend_acked;
 };
 
 /**
@@ -78,6 +91,11 @@ static int omap_rproc_mbox_callback(struct notifier_block *this,
 		break;
 	case RP_MBOX_ECHO_REPLY:
 		dev_info(dev, "received echo reply from %s\n", name);
+		break;
+	case RP_MBOX_SUSPEND_ACK:
+	case RP_MBOX_SUSPEND_CANCEL:
+		oproc->suspend_acked = msg == RP_MBOX_SUSPEND_ACK;
+		complete(&oproc->pm_comp);
 		break;
 	default:
 		/* ignore vq indices which are too large to be valid */
@@ -163,10 +181,54 @@ static int omap_rproc_stop(struct rproc *rproc)
 	return 0;
 }
 
+static bool _may_suspend(struct omap_rproc *oproc)
+{
+	return !oproc->idle || readl(oproc->idle) & oproc->idle_mask;
+}
+
+static int _suspend(struct omap_rproc *oproc, bool suspend)
+{
+	unsigned long to = msecs_to_jiffies(oproc->suspend_timeout);
+	unsigned long ta = jiffies + to;
+	int ret;
+
+	init_completion(&oproc->pm_comp);
+
+	omap_mbox_msg_send(oproc->mbox,
+			suspend ? RP_MBOX_SUSPEND_FORCED : RP_MBOX_SUSPEND);
+	ret = wait_for_completion_timeout(&oproc->pm_comp, to);
+	if (!oproc->suspend_acked) {
+		if (!ret)
+			return -ETIME;
+		return -EBUSY;
+	}
+
+
+	/* if suspend was acked, wait until it is on WFI state */
+	while (!_may_suspend(oproc)) {
+		if (time_after(jiffies, ta))
+			return -ETIME;
+		schedule();
+	}
+
+	return 0;
+}
+
+static int omap_rproc_suspend(struct rproc *rproc, bool suspend)
+{
+	struct omap_rproc *oproc = rproc->priv;
+
+	if (suspend || _may_suspend(oproc))
+		return _suspend(oproc, suspend);
+
+	return -EBUSY;
+}
+
 static struct rproc_ops omap_rproc_ops = {
 	.start		= omap_rproc_start,
 	.stop		= omap_rproc_stop,
 	.kick		= omap_rproc_kick,
+	.suspend	= omap_rproc_suspend,
 };
 
 static int __devinit omap_rproc_probe(struct platform_device *pdev)
@@ -189,6 +251,13 @@ static int __devinit omap_rproc_probe(struct platform_device *pdev)
 
 	oproc = rproc->priv;
 	oproc->rproc = rproc;
+	oproc->suspend_timeout = pdata->suspend_timeout ? : DEF_SUSPEND_TIMEOUT;
+	init_completion(&oproc->pm_comp);
+
+	if (pdata->idle_addr) {
+		oproc->idle = ioremap(pdata->idle_addr, sizeof(u32));
+		oproc->idle_mask = pdata->idle_mask;
+	}
 
 	platform_set_drvdata(pdev, rproc);
 
@@ -199,6 +268,8 @@ static int __devinit omap_rproc_probe(struct platform_device *pdev)
 	return 0;
 
 free_rproc:
+	if (oproc->idle)
+		iounmap(oproc->idle);
 	rproc_free(rproc);
 	return ret;
 }
@@ -216,6 +287,7 @@ static struct platform_driver omap_rproc_driver = {
 	.driver = {
 		.name = "omap-rproc",
 		.owner = THIS_MODULE,
+		.pm = GENERIC_RPROC_PM_OPS,
 	},
 };
 
