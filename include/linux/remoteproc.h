@@ -331,11 +331,15 @@ struct rproc;
  * @start:	power on the device and boot it
  * @stop:	power off the device
  * @kick:	kick a virtqueue (virtqueue id given as a parameter)
+ * @suspend	suspend callback (suspend set to true if system suspend)
+ * @resume	resume callback
  */
 struct rproc_ops {
 	int (*start)(struct rproc *rproc);
 	int (*stop)(struct rproc *rproc);
 	void (*kick)(struct rproc *rproc, int vqid);
+	int (*suspend)(struct rproc *rproc, bool suspend);
+	int (*resume)(struct rproc *rproc);
 };
 
 /**
@@ -383,6 +387,9 @@ enum rproc_state {
  * @bootaddr: address of first instruction to boot rproc with (optional)
  * @rvdevs: list of remote virtio devices
  * @notifyids: idr for dynamically assigning rproc-wide unique notify ids
+ * @pm_lock: mutext used to protect PM functions (suspend/resume)
+ * @pm_comp: completion used to block messages while system suspending
+ * @suspended: flag that is set when a system suspend happened
  */
 struct rproc {
 	struct klist_node node;
@@ -405,6 +412,9 @@ struct rproc {
 	u32 bootaddr;
 	struct list_head rvdevs;
 	struct idr notifyids;
+	struct mutex pm_lock;
+	struct completion pm_comp;
+	bool suspended;
 };
 
 /* we currently support only two vrings per rvdev */
@@ -450,6 +460,7 @@ struct rproc_vdev {
 	unsigned long gfeatures;
 };
 
+int rproc_kick(struct rproc *, int);
 struct rproc *rproc_get_by_name(const char *name);
 void rproc_put(struct rproc *rproc);
 
@@ -474,5 +485,8 @@ static inline struct rproc *vdev_to_rproc(struct virtio_device *vdev)
 
 	return rvdev->rproc;
 }
+
+extern const struct dev_pm_ops rproc_gen_pm_ops;
+#define GENERIC_RPROC_PM_OPS   (&rproc_gen_pm_ops)
 
 #endif /* REMOTEPROC_H */

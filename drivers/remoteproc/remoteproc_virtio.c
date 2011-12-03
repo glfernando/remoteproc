@@ -38,7 +38,7 @@ static void rproc_virtio_notify(struct virtqueue *vq)
 
 	dev_dbg(rproc->dev, "kicking vq index: %d\n", notifyid);
 
-	rproc->ops->kick(rproc, notifyid);
+	rproc_kick(rproc, notifyid);
 }
 
 /**
