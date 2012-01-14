@@ -204,6 +204,9 @@ enum rproc_state {
  * @firmware_loading_complete: marks e/o asynchronous firmware loading
  * @bootaddr: address of first instruction to boot rproc with (optional)
  * @rvdev: virtio device (we only support a single rpmsg virtio device for now)
+ * @pm_lock: mutext used to protect PM functions (suspend/resume)
+ * @pm_comp: completion used to block messages while system suspending
+ * @suspended: flag that is set when a system suspend happened
  */
 struct rproc {
 	struct klist_node node;
@@ -225,6 +228,9 @@ struct rproc {
 	struct completion firmware_loading_complete;
 	u64 bootaddr;
 	struct rproc_vdev *rvdev;
+	struct mutex pm_lock;
+	struct completion pm_comp;
+	bool suspended;
 };
 
 /**
@@ -245,6 +251,7 @@ struct rproc_vdev {
 	unsigned long gfeatures;
 };
 
+int rproc_kick(struct rproc *, int);
 struct rproc *rproc_get_by_name(const char *name);
 void rproc_put(struct rproc *rproc);
 

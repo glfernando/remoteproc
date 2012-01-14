@@ -68,7 +68,16 @@ typedef int (*rproc_handle_resources_t)(struct rproc *rproc,
 
 static int rproc_resume(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	struct rproc *rproc = platform_get_drvdata(pdev);
+
 	dev_dbg(dev, "Enter %s\n", __func__);
+
+	mutex_lock(&rproc->pm_lock);
+	complete_all(&rproc->pm_comp);
+	rproc->suspended = false;
+	mutex_unlock(&rproc->pm_lock);
+
 	return 0;
 }
 
@@ -80,20 +89,25 @@ static int rproc_suspend(struct device *dev)
 
 	dev_dbg(dev, "Enter %s\n", __func__);
 
+	mutex_lock(&rproc->pm_lock);
 	/* if already suspended do nothing */
 	if (pm_runtime_suspended(dev))
-		return 0;
+		goto out;
 
 	/* suspend remoteproc before turning off any device */
 	ret = rproc->ops->suspend(rproc, true);
 	if (ret)
 		goto err;
-
+out:
+	init_completion(&rproc->pm_comp);
+	rproc->suspended = true;
 	rproc->state = RPROC_SUSPENDED;
+	mutex_unlock(&rproc->pm_lock);
 
 	return 0;
 err:
 	dev_err(dev, "suspend failed %d\n", ret);
+	mutex_unlock(&rproc->pm_lock);
 	return ret;
 }
 
@@ -105,8 +119,10 @@ static int rproc_runtime_resume(struct device *dev)
 
 	dev_dbg(dev, "Enter %s\n", __func__);
 
+	mutex_lock(&rproc->pm_lock);
+
 	if (rproc->state != RPROC_SUSPENDED)
-		return ret;
+		goto unlock;
 
 	if (rproc->ops->resume)
 		ret = rproc->ops->resume(rproc);
@@ -115,6 +131,8 @@ static int rproc_runtime_resume(struct device *dev)
 		rproc->state = RPROC_RUNNING;
 	else
 		dev_err(dev, "resume failed %d\n", ret);
+unlock:
+	mutex_unlock(&rproc->pm_lock);
 
 	return ret;
 }
@@ -125,11 +143,20 @@ static int rproc_runtime_suspend(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct rproc *rproc = platform_get_drvdata(pdev);
 	int ret = 0;
+	unsigned to;
 
 	dev_dbg(dev, "Enter %s\n", __func__);
 
+	mutex_lock(&rproc->pm_lock);
+
 	if (rproc->state != RPROC_RUNNING)
-		return 0;
+		goto unlock;
+
+	/* if there was a call to pm_runtime_mark_last_busy abort suspend */
+	if (pm_runtime_autosuspend_expiration(dev)) {
+		ret = -EBUSY;
+		goto abort;
+	}
 
 	if (rproc->ops->suspend)
 		ret = rproc->ops->suspend(rproc, false);
@@ -146,9 +173,17 @@ static int rproc_runtime_suspend(struct device *dev)
 		goto abort;
 	}
 	rproc->state = RPROC_SUSPENDED;
+unlock:
+	mutex_unlock(&rproc->pm_lock);
 
 	return 0;
 abort:
+	pm_runtime_mark_last_busy(dev);
+	to = jiffies_to_msecs(pm_runtime_autosuspend_expiration(dev) - jiffies);
+	pm_schedule_suspend(dev, to);
+	dev->power.timer_autosuspends = 1;
+	mutex_unlock(&rproc->pm_lock);
+
 	return ret;
 }
 
@@ -1039,6 +1074,12 @@ static int rproc_fw_boot(struct rproc *rproc, const struct firmware *fw)
 		goto stop_rproc;
 	}
 
+	pm_runtime_set_autosuspend_delay(dev,
+					 CONFIG_REMOTEPROC_INACTIVITY_TIMEOUT);
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_mark_last_busy(rproc->dev);
+	pm_runtime_put_autosuspend(rproc->dev);
+
 	rproc->state = RPROC_RUNNING;
 
 	dev_info(dev, "remote processor %s is now up\n", rproc->name);
@@ -1202,6 +1243,13 @@ void rproc_shutdown(struct rproc *rproc)
 	if (!atomic_dec_and_test(&rproc->power))
 		goto out;
 
+	/*
+	 * Cancel possible pending autosuspend or wake it up in case it was
+	 * already suspended. Because the remoteproc needs to be stopped
+	 * without context saving.
+	 */
+	pm_runtime_get_sync(dev);
+
 	/* set the new state first to avoid saving context */
 	rproc->state = RPROC_OFFLINE;
 
@@ -1289,6 +1337,36 @@ static struct rproc *next_rproc(struct klist_iter *i)
 
 	return container_of(n, struct rproc, node);
 }
+
+int rproc_kick(struct rproc *rproc, int msg)
+{
+	struct device *dev = rproc->dev;
+
+	mutex_lock(&rproc->pm_lock);
+	pm_runtime_mark_last_busy(dev);
+	while (rproc->state == RPROC_SUSPENDED) {
+		/* if it is syspend wide suspend, wait for resume */
+		while (rproc->suspended) {
+			mutex_unlock(&rproc->pm_lock);
+			wait_for_completion(&rproc->pm_comp);
+			mutex_lock(&rproc->pm_lock);
+		}
+		/* remoteproc could be running at this time */
+		if (rproc->state == RPROC_RUNNING)
+			break;
+
+		mutex_unlock(&rproc->pm_lock);
+		pm_runtime_get_sync(dev);
+		pm_runtime_mark_last_busy(dev);
+		pm_runtime_put_autosuspend(dev);
+		mutex_lock(&rproc->pm_lock);
+	}
+	rproc->ops->kick(rproc, msg);
+	mutex_unlock(&rproc->pm_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL(rproc_kick);
 
 /**
  * rproc_get_by_name() - find a remote processor by name and boot it
@@ -1476,6 +1554,8 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 	kref_init(&rproc->refcount);
 
 	mutex_init(&rproc->lock);
+	mutex_init(&rproc->pm_lock);
+	init_completion(&rproc->pm_comp);
 
 	INIT_LIST_HEAD(&rproc->carveouts);
 	INIT_LIST_HEAD(&rproc->mappings);
