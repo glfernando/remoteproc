@@ -4,6 +4,15 @@ config RPMSG
 	select VIRTIO
 	select VIRTIO_RING
 
+config RPMSG_RESMGR
+	tristate "RPMSG resource manager"
+	default y
+	depends on RPMSG
+	---help---
+	  Add Framework base on RPMSG to request and release resources
+	  from a remote Processor.
+	  Say either Y or M. You know you want to.
+
 config RPMSG_SERVER_SAMPLE
 	tristate "An rpmsg server sample"
 	depends on RPMSG
