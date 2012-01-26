@@ -1317,7 +1317,6 @@ int rproc_kick(struct rproc *rproc, int msg)
 {
 	struct device *dev = rproc->dev;
 
-	mutex_lock(&rproc->lock);
 	mutex_lock(&rproc->pm_lock);
 	pm_runtime_mark_last_busy(dev);
 	while (rproc->state == RPROC_SUSPENDED) {
@@ -1339,7 +1338,6 @@ int rproc_kick(struct rproc *rproc, int msg)
 	}
 	rproc->ops->kick(rproc, msg);
 	mutex_unlock(&rproc->pm_lock);
-	mutex_unlock(&rproc->lock);
 
 	return 0;
 }
