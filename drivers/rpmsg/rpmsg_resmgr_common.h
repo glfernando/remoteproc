@@ -43,4 +43,8 @@ struct rprm_gpio {
 	u32 id;
 };
 
+struct rprm_i2c {
+	u32 id;
+};
+
 #endif /* _LINUX_RPMSG_RESMGR_COMMON_H */
