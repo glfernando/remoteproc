@@ -637,13 +637,13 @@ void __init omap242x_init_mmc(struct omap_mmc_platform_data **mmc_data)
 
 #endif
 
-static __init struct platform_device *omap4_init_fdif(void)
+static __init struct platform_device *
+omap4_init_dev(const char *name, const char *dev_name)
 {
 	struct platform_device *pd;
 	struct omap_hwmod *oh;
-	const char *dev_name = "omap-fdif";
 
-	oh = omap_hwmod_lookup("fdif");
+	oh = omap_hwmod_lookup(name);
 	if (!oh) {
 		pr_err("Could not look up fdif hwmod\n");
 		return NULL;
@@ -655,14 +655,14 @@ static __init struct platform_device *omap4_init_fdif(void)
 	return pd;
 }
 
-static void __init omap_init_fdif(void)
+static void __init omap_init_dev(const char *name, const char *dev_name)
 {
 	struct platform_device *pd;
 
 	if (!cpu_is_omap44xx())
 		return;
 
-	pd = omap4_init_fdif();
+	pd = omap4_init_dev(name, dev_name);
 	if (!pd)
 		return;
 
@@ -752,7 +752,9 @@ static int __init omap2_init_devices(void)
 	omap_init_sham();
 	omap_init_aes();
 	omap_init_vout();
-	omap_init_fdif();
+	omap_init_dev("fdif", "omap-fdif");
+	omap_init_dev("sl2if", "omap-sl2if");
+	omap_init_dev("iss", "omap-iss");
 
 	return 0;
 }
