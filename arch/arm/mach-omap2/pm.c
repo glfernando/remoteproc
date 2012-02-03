@@ -30,7 +30,15 @@
 #include "pm.h"
 #include "twl-common.h"
 
-static struct omap_device_pm_latency *pm_lats;
+static int omap_device_shutdown_hwmods(struct omap_device *od)
+{
+	int i;
+
+	for (i = 0; i < od->hwmods_cnt; i++)
+		omap_hwmod_shutdown(od->hwmods[i]);
+
+	return 0;
+}
 
 /*
  * omap_pm_suspend: points to a function that does the SoC-specific
@@ -38,7 +46,17 @@ static struct omap_device_pm_latency *pm_lats;
  */
 int (*omap_pm_suspend)(void);
 
-static int __init _init_omap_device(char *name)
+static struct omap_device_pm_latency iva_seq_pm_lats[] = {
+	{
+		/* iva seqs need to be put under hard reset */
+		.deactivate_func = omap_device_shutdown_hwmods,
+		.activate_func = omap_device_enable_hwmods,
+		.flags = OMAP_DEVICE_LATENCY_AUTO_ADJUST,
+	},
+};
+
+static int __init _init_omap_device(char *name, struct omap_device_pm_latency *pm_lats,
+							int pm_lats_cnt)
 {
 	struct omap_hwmod *oh;
 	struct platform_device *pdev;
@@ -48,7 +66,8 @@ static int __init _init_omap_device(char *name)
 		 __func__, name))
 		return -ENODEV;
 
-	pdev = omap_device_build(oh->name, 0, oh, NULL, 0, pm_lats, 0, false);
+	pdev = omap_device_build(oh->name, 0, oh, NULL, 0, pm_lats,
+				pm_lats_cnt, false);
 	if (WARN(IS_ERR(pdev), "%s: could not build omap_device for %s\n",
 		 __func__, name))
 		return -ENODEV;
@@ -61,16 +80,20 @@ static int __init _init_omap_device(char *name)
  */
 static void __init omap2_init_processor_devices(void)
 {
-	_init_omap_device("mpu");
+	_init_omap_device("mpu", NULL, 0);
 	if (omap3_has_iva())
-		_init_omap_device("iva");
+		_init_omap_device("iva", NULL, 0);
 
 	if (cpu_is_omap44xx()) {
-		_init_omap_device("l3_main_1");
-		_init_omap_device("dsp");
-		_init_omap_device("iva");
+		_init_omap_device("l3_main_1", NULL, 0);
+		_init_omap_device("dsp", NULL, 0);
+		_init_omap_device("iva", NULL, 0);
+		_init_omap_device("iva_seq0", iva_seq_pm_lats,
+						ARRAY_SIZE(iva_seq_pm_lats));
+		_init_omap_device("iva_seq1", iva_seq_pm_lats,
+						ARRAY_SIZE(iva_seq_pm_lats));
 	} else {
-		_init_omap_device("l3_main");
+		_init_omap_device("l3_main", NULL, 0);
 	}
 }
 
