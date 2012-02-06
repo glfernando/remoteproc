@@ -42,6 +42,14 @@
 enum rprm_action {
 	RPRM_REQUEST		= 0,
 	RPRM_RELEASE		= 1,
+	RPRM_SET_CONSTRAINTS	= 2,
+	RPRM_CLEAR_CONSTRAINTS	= 3,
+};
+
+enum {
+	RPRM_SCALE		= 0x1,
+	RPRM_LATENCY		= 0x2,
+	RPRM_BANDWIDTH		= 0x4,
 };
 
 /**
@@ -54,6 +62,9 @@ struct rprm_res_ops {
 	int (*request)(void **handle, void *args, size_t len);
 	int (*release)(void *handle);
 	int (*sprint)(void *handle, char *buf);
+	int (*scale)(void *handle, struct device *, long val);
+	int (*latency)(void *handle, struct device *, long val);
+	int (*bandwidth)(void *handle, struct device *, long val);
 };
 
 /**
@@ -66,6 +77,13 @@ struct rprm_res {
 	struct list_head next;
 	const char *name;
 	struct rprm_res_ops *ops;
+};
+
+struct rprm_constraints_data {
+	u32 mask;
+	long frequency;
+	long bandwidth;
+	long latency;
 };
 
 /**
@@ -84,6 +102,15 @@ struct rprm_request {
  */
 struct rprm_release {
 	u32 res_id;
+} __packed;
+
+/**
+ * struct rprm_release - header of a release action
+ * @res_id:	id of the resource
+ */
+struct rprm_constraint {
+	u32 res_id;
+	struct rprm_constraints_data cdata;
 } __packed;
 
 /**
