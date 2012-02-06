@@ -36,6 +36,7 @@ struct rprm_elem {
 	void *handle;
 	u32 id;
 	u32 base;
+	struct rprm_constraints_data constraints;
 };
 
 struct rprm {
@@ -46,6 +47,12 @@ struct rprm {
 	struct dentry *dentry;
 	struct rpmsg_channel *rpdev;
 	u32 src;
+};
+
+static struct rprm_constraints_data def_data = {
+	.frequency	= 0,
+	.bandwidth	= -1,
+	.latency	= -1,
 };
 
 /* List of availabe resources */
@@ -65,12 +72,100 @@ static struct rprm_res *__find_res_by_name(const char *name)
 	return NULL;
 }
 
+static int _set_constraints(struct device *dev, struct rprm_elem *e,
+				struct rprm_constraints_data *c)
+{
+	int ret = 0;
+	u32 mask = 0;
+
+	if (c->mask & RPRM_SCALE) {
+		if (!e->res->ops->scale) {
+			ret = -ENOSYS;
+			goto err;
+		}
+
+		ret = e->res->ops->scale(e->handle, dev, c->frequency);
+		if (ret)
+			goto err;
+		mask |= RPRM_SCALE;
+		e->constraints.frequency = c->frequency;
+	}
+
+	if (c->mask & RPRM_LATENCY) {
+		if (!e->res->ops->latency) {
+			ret = -ENOSYS;
+			goto err;
+		}
+
+		ret = e->res->ops->latency(e->handle, dev, c->latency);
+		if (ret)
+			goto err;
+		mask |= RPRM_LATENCY;
+		e->constraints.latency = c->latency;
+	}
+
+	if (c->mask & RPRM_BANDWIDTH) {
+		if (!e->res->ops->bandwidth) {
+			ret = -ENOSYS;
+			goto err;
+		}
+
+		ret = e->res->ops->bandwidth(e->handle, dev, c->bandwidth);
+		if (ret)
+			goto err;
+		mask |= RPRM_BANDWIDTH;
+		e->constraints.bandwidth = c->bandwidth;
+	}
+err:
+	c->mask = mask;
+	return ret;
+}
+
+static int rprm_set_constraints(struct rprm *rprm, int res_id,
+			   struct rprm_constraints_data *data, bool set)
+{
+	int ret = 0;
+	struct rprm_elem *e;
+	struct device *dev = &rprm->rpdev->dev;
+
+	mutex_lock(&rprm->lock);
+
+	e = idr_find(&rprm->id_list, res_id);
+	if (!e) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	if (set) {
+		ret = _set_constraints(dev, e, data);
+		if (!ret) {
+			e->constraints.mask |= data->mask;
+			goto out;
+		}
+	}
+	def_data.mask = data->mask;
+	if (def_data.mask) {
+		_set_constraints(dev, e, &def_data);
+		e->constraints.mask &= ~data->mask;
+	}
+out:
+	mutex_unlock(&rprm->lock);
+	return ret;
+}
+
 static int _resource_release(struct rprm *rprm, struct rprm_elem *e)
 {
 	int ret;
 	struct device *dev = &rprm->rpdev->dev;
 
 	dev_dbg(dev, "releasing %s resource\n", e->res->name);
+
+	/* if there are constraints remove them */
+	if (e->constraints.mask) {
+		def_data.mask = e->constraints.mask;
+		 _set_constraints(dev, e, &def_data);
+		e->constraints.mask &= ~def_data.mask;
+	}
 
 	if (e->res->ops->release) {
 		ret = e->res->ops->release(e->handle);
@@ -178,11 +273,13 @@ static void rprm_cb(struct rpmsg_channel *rpdev, void *data, int len,
 	struct rprm_msg *msg = data;
 	struct rprm_request *req;
 	struct rprm_release *rel;
+	struct rprm_constraint *c;
 	char ack_msg[MAX_MSG];
 	struct rprm_ack *ack = (void *)ack_msg;
 	struct rprm_request_ack *rack = (void *)ack->data;
 	int res_id;
 	int ret;
+	bool set;
 
 	len -= sizeof(*msg);
 	if (len < 0) {
@@ -237,6 +334,27 @@ static void rprm_cb(struct rpmsg_channel *rpdev, void *data, int len,
 			dev_err(dev, "resource release failed %d!\n", ret);
 		/* no ack for release resource */
 		return;
+	case RPRM_SET_CONSTRAINTS:
+	case RPRM_CLEAR_CONSTRAINTS:
+		len -= sizeof(*c);
+		if (len < 0) {
+			dev_err(dev, "Bad message\n");
+			return;
+		}
+		set = msg->action == RPRM_SET_CONSTRAINTS;
+		c = (void *)msg->data;
+		down_read(&table_lock);
+		ret = rprm_set_constraints(rprm, c->res_id, &c->cdata, set);
+		up_read(&table_lock);
+		if (ret)
+			dev_err(dev, "set constraints failed! ret %d\n", ret);
+		/* no ack for clear constraint */
+		if (!set)
+			return;
+
+		len = sizeof(*c);
+		memcpy(ack->data, c, len);
+		break;
 	default:
 		dev_err(dev, "Unknow action\n");
 		ret = -EINVAL;
@@ -248,6 +366,17 @@ out:
 	ret = rpmsg_sendto(rpdev, ack, sizeof(*ack) + len, src);
 	if (ret)
 		dev_err(dev, "rprm ack failed: %d\n", ret);
+}
+
+static int _printf_constraints_args(struct rprm_elem *e, char *buf)
+{
+	return sprintf(buf,
+		"Mask:0x%x\n"
+		"Frequency:%ld\n"
+		"Latency:%ld\n"
+		"Bandwidth:%ld\n",
+		e->constraints.mask, e->constraints.frequency,
+		e->constraints.latency, e->constraints.bandwidth);
 }
 
 static ssize_t rprm_dbg_read(struct file *filp, char __user *userbuf,
@@ -267,6 +396,9 @@ static ssize_t rprm_dbg_read(struct file *filp, char __user *userbuf,
 
 		if (e->res->ops->get_info)
 			c += e->res->ops->get_info(e->handle, buf + c);
+
+		if (e->constraints.mask)
+			c += _printf_constraints_args(e, buf + c);
 
 		p += c;
 		if (*ppos >= p) {
