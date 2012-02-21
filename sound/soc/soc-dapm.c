@@ -775,10 +775,14 @@ static int is_connected_output_ep(struct snd_soc_dapm_widget *widget,
 	}
 
 	switch (widget->id) {
-	case snd_soc_dapm_adc:
-	case snd_soc_dapm_aif_out:
 	case snd_soc_dapm_dai:
-		if (widget->active) {
+		if (widget->dai_endpoint) {
+			widget->outputs = 0;
+			return widget->outputs;
+		}
+	case snd_soc_dapm_aif_out:
+	case snd_soc_dapm_adc:
+		if (widget->active && list_empty(&widget->sinks)) {
 			widget->outputs = snd_soc_dapm_suspend_check(widget);
 			return widget->outputs;
 		}
@@ -863,10 +867,14 @@ static int is_connected_input_ep(struct snd_soc_dapm_widget *widget,
 
 	/* active stream ? */
 	switch (widget->id) {
-	case snd_soc_dapm_dac:
-	case snd_soc_dapm_aif_in:
 	case snd_soc_dapm_dai:
-		if (widget->active) {
+		if (widget->dai_endpoint) {
+			widget->inputs = 0;
+			return widget->inputs;
+		}
+	case snd_soc_dapm_aif_in:
+	case snd_soc_dapm_dac:
+		if (widget->active && list_empty(&widget->sources)) {
 			widget->inputs = snd_soc_dapm_suspend_check(widget);
 			return widget->inputs;
 		}
@@ -945,6 +953,7 @@ static int is_connected_input_ep(struct snd_soc_dapm_widget *widget,
  * Queries DAPM graph as to whether an valid audio stream path exists for
  * the initial stream specified by name. This takes into account
  * current mixer and mux kcontrol settings. Creates list of valid widgets.
+ * Intended for internal use atm where caller holds the card mutex.
  *
  * Returns the number of valid paths or negative error.
  */
@@ -954,7 +963,6 @@ int snd_soc_dapm_dai_get_connected_widgets(struct snd_soc_dai *dai, int stream,
 	struct snd_soc_card *card = dai->card;
 	int paths;
 
-	mutex_lock_nested(&card->dapm_mutex, SND_SOC_DAPM_CLASS_RUNTIME);
 	dapm_reset(card);
 
 	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
@@ -964,7 +972,6 @@ int snd_soc_dapm_dai_get_connected_widgets(struct snd_soc_dai *dai, int stream,
 
 	trace_snd_soc_dapm_connected(paths, stream);
 	dapm_clear_walk(&card->dapm);
-	mutex_unlock(&card->dapm_mutex);
 
 	return paths;
 }
@@ -1070,7 +1077,7 @@ static int dapm_adc_check_power(struct snd_soc_dapm_widget *w)
 
 	DAPM_UPDATE_STAT(w, power_checks);
 
-	if (w->active) {
+	if (w->active && list_empty(&w->sinks)) {
 		in = is_connected_input_ep(w, NULL);
 		dapm_clear_walk(w->dapm);
 		return in != 0;
@@ -1086,7 +1093,7 @@ static int dapm_dac_check_power(struct snd_soc_dapm_widget *w)
 
 	DAPM_UPDATE_STAT(w, power_checks);
 
-	if (w->active) {
+	if (w->active && list_empty(&w->sources)) {
 		out = is_connected_output_ep(w, NULL);
 		dapm_clear_walk(w->dapm);
 		return out != 0;
@@ -1487,7 +1494,7 @@ static void dapm_widget_set_peer_power(struct snd_soc_dapm_widget *peer,
 
 	/* If the peer is already in the state we're moving to then we
 	 * won't have an impact on it. */
-	if (power != peer->power)
+	if (power != peer->power || peer->id == snd_soc_dapm_dai)
 		dapm_mark_dirty(peer, "peer state change");
 }
 
@@ -1497,7 +1504,7 @@ static void dapm_widget_set_power(struct snd_soc_dapm_widget *w, bool power,
 {
 	struct snd_soc_dapm_path *path;
 
-	if (w->power == power)
+	if (w->power == power && w->id != snd_soc_dapm_dai)
 		return;
 
 	trace_snd_soc_dapm_widget_power(w, power);
