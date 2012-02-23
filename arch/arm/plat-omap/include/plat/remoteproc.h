@@ -30,6 +30,8 @@ struct platform_device;
  * @idle_addr: physical address of the idle register
  * @idle_mask: mask of the idle register
  * @suspend_timeout: max timeout waiting for suspend request respond
+ * @inact_timeout: inactivite timeout for autosuspend (use -1 if you don't
+ *		    want autosuspend)
  * @ops: start/stop rproc handlers
  */
 struct omap_rproc_pdata {
@@ -41,6 +43,7 @@ struct omap_rproc_pdata {
 	u32 idle_addr;
 	u32 idle_mask;
 	unsigned long suspend_timeout;
+	int inact_timeout;
 	const struct rproc_ops *ops;
 };
 
