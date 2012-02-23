@@ -390,6 +390,7 @@ enum rproc_state {
  * @pm_lock: mutext used to protect PM functions (suspend/resume)
  * @pm_comp: completion used to block messages while system suspending
  * @suspended: flag that is set when a system suspend happened
+ * @inact_timeout: inactivity timeout for autosuspend
  */
 struct rproc {
 	struct klist_node node;
@@ -415,6 +416,7 @@ struct rproc {
 	struct mutex pm_lock;
 	struct completion pm_comp;
 	bool suspended;
+	int inact_timeout;
 };
 
 /* we currently support only two vrings per rvdev */

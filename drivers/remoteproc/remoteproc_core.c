@@ -173,6 +173,12 @@ static int rproc_runtime_suspend(struct device *dev)
 	if (rproc->state != RPROC_RUNNING)
 		goto unlock;
 
+	/* if there was a call to pm_runtime_mark_last_busy abort suspend */
+	if (pm_runtime_autosuspend_expiration(dev)) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+
 	if (rproc->ops->suspend)
 		ret = rproc->ops->suspend(rproc, false);
 	/*
@@ -188,6 +194,8 @@ static int rproc_runtime_suspend(struct device *dev)
 	}
 	rproc->state = RPROC_SUSPENDED;
 unlock:
+	if (ret)
+		pm_runtime_mark_last_busy(dev);
 	mutex_unlock(&rproc->pm_lock);
 
 	return ret;
@@ -1211,6 +1219,16 @@ static int rproc_fw_boot(struct rproc *rproc, const struct firmware *fw)
 							rproc->name,  ret);
 		goto stop_rproc;
 	}
+	/* use default autosuspend timeout when inact_timeout is 0 */
+	rproc->inact_timeout = rproc->inact_timeout ? :
+					CONFIG_REMOTEPROC_INACTIVITY_TIMEOUT;
+	/* -1 means no autosuspend */
+	if (rproc->inact_timeout != -1) {
+		pm_runtime_set_autosuspend_delay(dev, rproc->inact_timeout);
+		pm_runtime_use_autosuspend(dev);
+		pm_runtime_mark_last_busy(rproc->dev);
+		pm_runtime_put_autosuspend(rproc->dev);
+	}
 
 	rproc->state = RPROC_RUNNING;
 
@@ -1372,6 +1390,13 @@ void rproc_shutdown(struct rproc *rproc)
 	if (!atomic_dec_and_test(&rproc->power))
 		goto out;
 
+	/*
+	 * Cancel possible pending autosuspend or wake it up in case it was
+	 * already suspended. Because the remoteproc needs to be stopped
+	 * without context saving.
+	 */
+	pm_runtime_get_sync(dev);
+
 	/* set the new state first to avoid saving context */
 	rproc->state = RPROC_OFFLINE;
 
@@ -1475,10 +1500,22 @@ int rproc_kick(struct rproc *rproc, int msg)
 	struct device *dev = rproc->dev;
 
 	mutex_lock(&rproc->pm_lock);
-	/* if it is syspend wide suspend, wait for resume */
-	while (rproc->suspended) {
+	pm_runtime_mark_last_busy(dev);
+	while (rproc->state == RPROC_SUSPENDED) {
+		/* if it is syspend wide suspend, wait for resume */
+		while (rproc->suspended) {
+			mutex_unlock(&rproc->pm_lock);
+			wait_for_completion(&rproc->pm_comp);
+			mutex_lock(&rproc->pm_lock);
+		}
+		/* remoteproc could be running at this time */
+		if (rproc->state == RPROC_RUNNING)
+			break;
+
 		mutex_unlock(&rproc->pm_lock);
-		wait_for_completion(&rproc->pm_comp);
+		pm_runtime_get_sync(dev);
+		pm_runtime_mark_last_busy(dev);
+		pm_runtime_put_autosuspend(dev);
 		mutex_lock(&rproc->pm_lock);
 	}
 	rproc->ops->kick(rproc, msg);
