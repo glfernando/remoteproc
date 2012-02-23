@@ -5,6 +5,14 @@ config REMOTEPROC
 	tristate
 	depends on EXPERIMENTAL
 
+config REMOTEPROC_INACTIVITY_TIMEOUT
+	int "Remoteproc default inactivity timeout (in msecs)"
+	depends on REMOTEPROC
+	default 5000
+	help
+	  Inactivity timeout to enter to suspend automatically. It is useful
+	  for saving Power.
+
 config OMAP_REMOTEPROC
 	tristate "OMAP remoteproc support"
 	depends on ARCH_OMAP4
