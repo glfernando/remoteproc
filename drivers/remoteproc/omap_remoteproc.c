@@ -238,6 +238,7 @@ static int __devinit omap_rproc_probe(struct platform_device *pdev)
 
 	oproc = rproc->priv;
 	oproc->rproc = rproc;
+	rproc->inact_timeout = pdata->inact_timeout;
 	oproc->suspend_timeout = pdata->suspend_timeout ? : DEF_SUSPEND_TIMEOUT;
 	init_completion(&oproc->pm_comp);
 
