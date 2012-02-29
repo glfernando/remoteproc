@@ -22,6 +22,7 @@
 #include <linux/pm_runtime.h>
 #include <plat/dma.h>
 #include <plat/dmtimer.h>
+#include <plat/omap-pm.h>
 #include "omap_rpmsg_resmgr.h"
 
 #define GPTIMERS_MAX	11
@@ -316,6 +317,22 @@ static int _device_release(void *dev)
 	return pm_runtime_put_sync(dev);
 }
 
+static int _device_scale(void *dev, struct device *tdev, unsigned long val)
+{
+	//return omap_device_scale(dev, &pdev->dev, val);
+	return 0;
+}
+
+static int _device_latency(void *dev, struct device *tdev, unsigned long val)
+{
+	return omap_pm_set_max_dev_wakeup_lat(dev, tdev, val);
+}
+
+static int _device_bandwidth(void *dev, struct device *tdev, unsigned long val)
+{
+	return omap_pm_set_min_bus_tput(dev, OCP_INITIATOR_AGENT, val);
+}
+
 static int rprm_iva_request(void **handle, void *data, size_t len)
 {
 	static struct device *dev;
@@ -378,7 +395,10 @@ static struct rprm_res_ops auxclk_ops = {
 
 static struct rprm_res_ops iva_ops = {
 	.request = rprm_iva_request,
-	.release = _device_release
+	.release = _device_release,
+	.latency = _device_latency,
+	.bandwidth = _device_bandwidth,
+	.scale = _device_scale
 };
 
 static struct rprm_res_ops iva_seq0_ops = {
@@ -393,7 +413,10 @@ static struct rprm_res_ops iva_seq1_ops = {
 
 static struct rprm_res_ops fdif_ops = {
 	.request = rprm_fdif_request,
-	.release = _device_release
+	.release = _device_release,
+	.latency = _device_latency,
+	.bandwidth = _device_bandwidth,
+	.scale = _device_scale
 };
 
 static struct rprm_res_ops sl2if_ops = {
@@ -403,7 +426,9 @@ static struct rprm_res_ops sl2if_ops = {
 
 static struct rprm_res_ops iss_ops = {
 	.request = rprm_iss_request,
-	.release = _device_release
+	.release = _device_release,
+	.latency = _device_latency,
+	.bandwidth = _device_bandwidth,
 };
 
 static struct rprm_res omap_res[] = {
