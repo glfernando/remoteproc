@@ -21,6 +21,7 @@
 #include <linux/cpufreq.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
+#include <linux/export.h>
 
 /* Interface documentation is in mach/omap-pm.h */
 #include <plat/omap-pm.h>
@@ -87,6 +88,7 @@ int omap_pm_set_min_bus_tput(struct device *dev, u8 agent_id, unsigned long r)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(omap_pm_set_min_bus_tput);
 
 int omap_pm_set_max_dev_wakeup_lat(struct device *req_dev, struct device *dev,
 				   long t)
@@ -118,6 +120,7 @@ int omap_pm_set_max_dev_wakeup_lat(struct device *req_dev, struct device *dev,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(omap_pm_set_max_dev_wakeup_lat);
 
 int omap_pm_set_max_sdma_lat(struct device *dev, long t)
 {
