@@ -113,6 +113,7 @@ struct rpmsg_channel {
 	u32 dst;
 	struct rpmsg_endpoint *ept;
 	bool announce;
+	void *priv;
 };
 
 typedef void (*rpmsg_rx_cb_t)(struct rpmsg_channel *, void *, int, void *, u32);
