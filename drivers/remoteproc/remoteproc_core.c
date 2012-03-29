@@ -66,6 +66,9 @@ typedef int (*rproc_handle_resources_t)(struct rproc *rproc,
 				struct resource_table *table, int len);
 typedef int (*rproc_handle_resource_t)(struct rproc *rproc, void *, int avail);
 
+/* Unique numbering for remoteproc devices */
+static unsigned int dev_index;
+
 /*
  * This is the IOMMU fault handler we register with the IOMMU API
  * (when relevant; not all remote processors access memory through
@@ -92,7 +95,7 @@ static int rproc_iommu_fault(struct iommu_domain *domain, struct device *dev,
 static int rproc_enable_iommu(struct rproc *rproc)
 {
 	struct iommu_domain *domain;
-	struct device *dev = rproc->dev;
+	struct device *dev = rproc->dev.parent;
 	int ret;
 
 	/*
@@ -137,7 +140,7 @@ free_domain:
 static void rproc_disable_iommu(struct rproc *rproc)
 {
 	struct iommu_domain *domain = rproc->domain;
-	struct device *dev = rproc->dev;
+	struct device *dev = rproc->dev.parent;
 
 	if (!domain)
 		return;
@@ -217,7 +220,7 @@ static void *rproc_da_to_va(struct rproc *rproc, u64 da, int len)
 static int
 rproc_load_segments(struct rproc *rproc, const u8 *elf_data, size_t len)
 {
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	struct elf32_hdr *ehdr;
 	struct elf32_phdr *phdr;
 	int i, ret = 0;
@@ -283,7 +286,7 @@ static int
 __rproc_handle_vring(struct rproc_vdev *rvdev, struct fw_rsc_vdev *rsc, int i)
 {
 	struct rproc *rproc = rvdev->rproc;
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	struct fw_rsc_vdev_vring *vring = &rsc->vring[i];
 	dma_addr_t dma;
 	void *va;
@@ -317,9 +320,9 @@ __rproc_handle_vring(struct rproc_vdev *rvdev, struct fw_rsc_vdev *rsc, int i)
 	 * Allocate non-cacheable memory for the vring. In the future
 	 * this call will also configure the IOMMU for us
 	 */
-	va = dma_alloc_coherent(dev, size, &dma, GFP_KERNEL);
+	va = dma_alloc_coherent(dev->parent, size, &dma, GFP_KERNEL);
 	if (!va) {
-		dev_err(dev, "dma_alloc_coherent failed\n");
+		dev_err(dev->parent, "dma_alloc_coherent failed\n");
 		return -EINVAL;
 	}
 
@@ -328,7 +331,7 @@ __rproc_handle_vring(struct rproc_vdev *rvdev, struct fw_rsc_vdev *rsc, int i)
 	ret = idr_get_new(&rproc->notifyids, &rvdev->vring[i], &notifyid);
 	if (ret) {
 		dev_err(dev, "idr_get_new failed: %d\n", ret);
-		dma_free_coherent(dev, size, va, dma);
+		dma_free_coherent(dev->parent, size, va, dma);
 		return ret;
 	}
 
@@ -353,12 +356,13 @@ __rproc_handle_vring(struct rproc_vdev *rvdev, struct fw_rsc_vdev *rsc, int i)
 static void __rproc_free_vrings(struct rproc_vdev *rvdev, int i)
 {
 	struct rproc *rproc = rvdev->rproc;
+	struct device *dev = &rproc->dev;
 
 	for (i--; i > 0; i--) {
 		struct rproc_vring *rvring = &rvdev->vring[i];
 		int size = PAGE_ALIGN(vring_size(rvring->len, rvring->align));
 
-		dma_free_coherent(rproc->dev, size, rvring->va, rvring->dma);
+		dma_free_coherent(dev->parent, size, rvring->va, rvring->dma);
 		idr_remove(&rproc->notifyids, rvring->notifyid);
 	}
 }
@@ -393,14 +397,14 @@ static void __rproc_free_vrings(struct rproc_vdev *rvdev, int i)
 static int rproc_handle_vdev(struct rproc *rproc, struct fw_rsc_vdev *rsc,
 								int avail)
 {
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	struct rproc_vdev *rvdev;
 	int i, ret;
 
 	/* make sure resource isn't truncated */
 	if (sizeof(*rsc) + rsc->num_of_vrings * sizeof(struct fw_rsc_vdev_vring)
 			+ rsc->config_len > avail) {
-		dev_err(rproc->dev, "vdev rsc is truncated\n");
+		dev_err(dev, "vdev rsc is truncated\n");
 		return -EINVAL;
 	}
 
@@ -470,12 +474,12 @@ static int rproc_handle_trace(struct rproc *rproc, struct fw_rsc_trace *rsc,
 								int avail)
 {
 	struct rproc_mem_entry *trace;
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	void *ptr;
 	char name[15];
 
 	if (sizeof(*rsc) > avail) {
-		dev_err(rproc->dev, "trace rsc is truncated\n");
+		dev_err(dev, "trace rsc is truncated\n");
 		return -EINVAL;
 	}
 
@@ -552,6 +556,7 @@ static int rproc_handle_devmem(struct rproc *rproc, struct fw_rsc_devmem *rsc,
 								int avail)
 {
 	struct rproc_mem_entry *mapping;
+	struct device *dev = &rproc->dev;
 	int ret;
 
 	/* no point in handling this resource without a valid iommu domain */
@@ -559,25 +564,25 @@ static int rproc_handle_devmem(struct rproc *rproc, struct fw_rsc_devmem *rsc,
 		return -EINVAL;
 
 	if (sizeof(*rsc) > avail) {
-		dev_err(rproc->dev, "devmem rsc is truncated\n");
+		dev_err(dev, "devmem rsc is truncated\n");
 		return -EINVAL;
 	}
 
 	/* make sure reserved bytes are zeroes */
 	if (rsc->reserved) {
-		dev_err(rproc->dev, "devmem rsc has non zero reserved bytes\n");
+		dev_err(dev, "devmem rsc has non zero reserved bytes\n");
 		return -EINVAL;
 	}
 
 	mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
 	if (!mapping) {
-		dev_err(rproc->dev, "kzalloc mapping failed\n");
+		dev_err(dev, "kzalloc mapping failed\n");
 		return -ENOMEM;
 	}
 
 	ret = iommu_map(rproc->domain, rsc->da, rsc->pa, rsc->len, rsc->flags);
 	if (ret) {
-		dev_err(rproc->dev, "failed to map devmem: %d\n", ret);
+		dev_err(dev, "failed to map devmem: %d\n", ret);
 		goto out;
 	}
 
@@ -592,7 +597,7 @@ static int rproc_handle_devmem(struct rproc *rproc, struct fw_rsc_devmem *rsc,
 	mapping->len = rsc->len;
 	list_add_tail(&mapping->node, &rproc->mappings);
 
-	dev_dbg(rproc->dev, "mapped devmem pa 0x%x, da 0x%x, len 0x%x\n",
+	dev_dbg(dev, "mapped devmem pa 0x%x, da 0x%x, len 0x%x\n",
 					rsc->pa, rsc->da, rsc->len);
 
 	return 0;
@@ -624,13 +629,13 @@ static int rproc_handle_carveout(struct rproc *rproc,
 				struct fw_rsc_carveout *rsc, int avail)
 {
 	struct rproc_mem_entry *carveout, *mapping;
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	dma_addr_t dma;
 	void *va;
 	int ret;
 
 	if (sizeof(*rsc) > avail) {
-		dev_err(rproc->dev, "carveout rsc is truncated\n");
+		dev_err(dev, "carveout rsc is truncated\n");
 		return -EINVAL;
 	}
 
@@ -656,9 +661,9 @@ static int rproc_handle_carveout(struct rproc *rproc,
 		goto free_mapping;
 	}
 
-	va = dma_alloc_coherent(dev, rsc->len, &dma, GFP_KERNEL);
+	va = dma_alloc_coherent(dev->parent, rsc->len, &dma, GFP_KERNEL);
 	if (!va) {
-		dev_err(dev, "failed to dma alloc carveout: %d\n", rsc->len);
+		dev_err(dev->parent, "dma_alloc_coherent failed: %d\n", rsc->len);
 		ret = -ENOMEM;
 		goto free_carv;
 	}
@@ -729,7 +734,7 @@ static int rproc_handle_carveout(struct rproc *rproc,
 	return 0;
 
 dma_free:
-	dma_free_coherent(dev, rsc->len, va, dma);
+	dma_free_coherent(dev->parent, rsc->len, va, dma);
 free_carv:
 	kfree(carveout);
 free_mapping:
@@ -752,7 +757,7 @@ static rproc_handle_resource_t rproc_handle_rsc[] = {
 static int
 rproc_handle_boot_rsc(struct rproc *rproc, struct resource_table *table, int len)
 {
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	rproc_handle_resource_t handler;
 	int ret = 0, i;
 
@@ -791,7 +796,7 @@ rproc_handle_boot_rsc(struct rproc *rproc, struct resource_table *table, int len
 static int
 rproc_handle_virtio_rsc(struct rproc *rproc, struct resource_table *table, int len)
 {
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	int ret = 0, i;
 
 	for (i = 0; i < table->num; i++) {
@@ -844,7 +849,7 @@ rproc_find_rsc_table(struct rproc *rproc, const u8 *elf_data, size_t len,
 	struct elf32_hdr *ehdr;
 	struct elf32_shdr *shdr;
 	const char *name_table;
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	struct resource_table *table = NULL;
 	int i;
 
@@ -910,7 +915,7 @@ rproc_find_rsc_table(struct rproc *rproc, const u8 *elf_data, size_t len,
 static void rproc_resource_cleanup(struct rproc *rproc)
 {
 	struct rproc_mem_entry *entry, *tmp;
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 
 	/* clean up debugfs trace entries */
 	list_for_each_entry_safe(entry, tmp, &rproc->traces, node) {
@@ -922,7 +927,7 @@ static void rproc_resource_cleanup(struct rproc *rproc)
 
 	/* clean up carveout allocations */
 	list_for_each_entry_safe(entry, tmp, &rproc->carveouts, node) {
-		dma_free_coherent(dev, entry->len, entry->va, entry->dma);
+		dma_free_coherent(dev->parent, entry->len, entry->va, entry->dma);
 		list_del(&entry->node);
 		kfree(entry);
 	}
@@ -947,7 +952,7 @@ static void rproc_resource_cleanup(struct rproc *rproc)
 static int rproc_fw_sanity_check(struct rproc *rproc, const struct firmware *fw)
 {
 	const char *name = rproc->firmware;
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	struct elf32_hdr *ehdr;
 	char class;
 
@@ -1008,7 +1013,7 @@ static int rproc_fw_sanity_check(struct rproc *rproc, const struct firmware *fw)
  */
 static int rproc_fw_boot(struct rproc *rproc, const struct firmware *fw)
 {
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	const char *name = rproc->firmware;
 	struct elf32_hdr *ehdr;
 	struct resource_table *table;
@@ -1133,7 +1138,7 @@ int rproc_boot(struct rproc *rproc)
 		return -EINVAL;
 	}
 
-	dev = rproc->dev;
+	dev = &rproc->dev;
 
 	ret = mutex_lock_interruptible(&rproc->lock);
 	if (ret) {
@@ -1149,7 +1154,7 @@ int rproc_boot(struct rproc *rproc)
 	}
 
 	/* prevent underlying implementation from being removed */
-	if (!try_module_get(dev->driver->owner)) {
+	if (!try_module_get(dev->parent->driver->owner)) {
 		dev_err(dev, "%s: can't get owner\n", __func__);
 		ret = -EINVAL;
 		goto unlock_mutex;
@@ -1176,7 +1181,7 @@ int rproc_boot(struct rproc *rproc)
 
 downref_rproc:
 	if (ret) {
-		module_put(dev->driver->owner);
+		module_put(dev->parent->driver->owner);
 		atomic_dec(&rproc->power);
 	}
 unlock_mutex:
@@ -1210,7 +1215,7 @@ EXPORT_SYMBOL(rproc_boot);
  */
 void rproc_shutdown(struct rproc *rproc)
 {
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	int ret;
 
 	ret = mutex_lock_interruptible(&rproc->lock);
@@ -1243,7 +1248,7 @@ void rproc_shutdown(struct rproc *rproc)
 out:
 	mutex_unlock(&rproc->lock);
 	if (!ret)
-		module_put(dev->driver->owner);
+		module_put(dev->parent->driver->owner);
 }
 EXPORT_SYMBOL(rproc_shutdown);
 
@@ -1267,7 +1272,7 @@ void rproc_release(struct kref *kref)
 	struct rproc *rproc = container_of(kref, struct rproc, refcount);
 	struct rproc_vdev *rvdev, *rvtmp;
 
-	dev_info(rproc->dev, "removing %s\n", rproc->name);
+	dev_info(&rproc->dev, "removing %s\n", rproc->name);
 
 	rproc_delete_debug_dir(rproc);
 
@@ -1405,13 +1410,17 @@ EXPORT_SYMBOL(rproc_put);
  */
 int rproc_register(struct rproc *rproc)
 {
-	struct device *dev = rproc->dev;
+	struct device *dev = &rproc->dev;
 	int ret = 0;
+
+	ret = device_add(dev);
+	if (ret < 0)
+		return ret;
 
 	/* expose to rproc_get_by_name users */
 	klist_add_tail(&rproc->node, &rprocs);
 
-	dev_info(rproc->dev, "%s is available\n", rproc->name);
+	dev_info(dev, "%s is available\n", rproc->name);
 
 	dev_info(dev, "Note: remoteproc is still under development and considered experimental.\n");
 	dev_info(dev, "THE BINARY FORMAT IS NOT YET FINALIZED, and backward compatibility isn't yet guaranteed.\n");
@@ -1442,6 +1451,19 @@ int rproc_register(struct rproc *rproc)
 	return ret;
 }
 EXPORT_SYMBOL(rproc_register);
+
+static void rproc_class_release(struct device *dev)
+{
+	struct rproc *rproc = container_of(dev, struct rproc, dev);
+
+	kfree(rproc);
+}
+
+static struct class rproc_class = {
+	.name		= "rproc",
+	.owner		= THIS_MODULE,
+	.dev_release	= rproc_class_release,
+};
 
 /**
  * rproc_alloc() - allocate a remote processor handle
@@ -1481,11 +1503,18 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 		return NULL;
 	}
 
-	rproc->dev = dev;
 	rproc->name = name;
 	rproc->ops = ops;
 	rproc->firmware = firmware;
 	rproc->priv = &rproc[1];
+
+	device_initialize(&rproc->dev);
+	rproc->dev.parent = dev;
+	rproc->dev.class = &rproc_class;
+
+	/* Assign a unique device index and name */
+	rproc->index = dev_index++;
+	dev_set_name(&rproc->dev, "remoteproc%d", rproc->index);
 
 	atomic_set(&rproc->power, 0);
 
@@ -1521,7 +1550,7 @@ void rproc_free(struct rproc *rproc)
 	idr_remove_all(&rproc->notifyids);
 	idr_destroy(&rproc->notifyids);
 
-	kfree(rproc);
+	put_device(&rproc->dev);
 }
 EXPORT_SYMBOL(rproc_free);
 
@@ -1562,6 +1591,8 @@ int rproc_unregister(struct rproc *rproc)
 	/* the rproc is downref'ed as soon as it's removed from the klist */
 	klist_del(&rproc->node);
 
+	device_del(&rproc->dev);
+
 	/* the rproc will only be released after its refcount drops to zero */
 	kref_put(&rproc->refcount, rproc_release);
 
@@ -1571,7 +1602,14 @@ EXPORT_SYMBOL(rproc_unregister);
 
 static int __init remoteproc_init(void)
 {
+	int ret;
+
+	ret = class_register(&rproc_class);
+	if (ret)
+		return ret;
+
 	rproc_init_debugfs();
+
 	return 0;
 }
 module_init(remoteproc_init);
@@ -1579,6 +1617,8 @@ module_init(remoteproc_init);
 static void __exit remoteproc_exit(void)
 {
 	rproc_exit_debugfs();
+
+	class_unregister(&rproc_class);
 }
 module_exit(remoteproc_exit);
 
