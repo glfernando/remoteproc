@@ -43,6 +43,8 @@
 
 #include "remoteproc_internal.h"
 
+#define dev_to_rproc(dev) container_of(dev, struct rproc, dev)
+
 static void klist_rproc_get(struct klist_node *n);
 static void klist_rproc_put(struct klist_node *n);
 
@@ -68,6 +70,48 @@ typedef int (*rproc_handle_resource_t)(struct rproc *rproc, void *, int avail);
 
 /* Unique numbering for remoteproc devices */
 static unsigned int dev_index;
+
+static int rproc_resume(struct device *dev)
+{
+	struct rproc *rproc = dev_to_rproc(dev);
+	int ret = 0;
+
+	dev_dbg(dev, "Enter %s\n", __func__);
+
+	if (rproc->ops->resume) {
+		ret = rproc->ops->resume(rproc);
+		if (ret)
+			dev_err(dev, "resume failed %d\n", ret);
+		goto out;
+	}
+
+	rproc->state = RPROC_RUNNING;
+out:
+	return ret;
+}
+
+static int rproc_suspend(struct device *dev)
+{
+	struct rproc *rproc = dev_to_rproc(dev);
+	int ret = 0;
+
+	dev_dbg(dev, "Enter %s\n", __func__);
+
+	if (rproc->ops->suspend) {
+		ret = rproc->ops->suspend(rproc);
+		if (ret)
+			dev_err(dev, "suspend failed %d\n", ret);
+			goto out;
+	}
+
+	rproc->state = RPROC_SUSPENDED;
+out:
+	return ret;
+}
+
+static struct dev_pm_ops rproc_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(rproc_suspend, rproc_resume)
+};
 
 /*
  * This is the IOMMU fault handler we register with the IOMMU API
@@ -1463,6 +1507,7 @@ static struct class rproc_class = {
 	.name		= "rproc",
 	.owner		= THIS_MODULE,
 	.dev_release	= rproc_class_release,
+	.pm		= &rproc_pm_ops,
 };
 
 /**
