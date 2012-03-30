@@ -331,11 +331,15 @@ struct rproc;
  * @start:	power on the device and boot it
  * @stop:	power off the device
  * @kick:	kick a virtqueue (virtqueue id given as a parameter)
+ * @suspend	suspend callback
+ * @resume	resume callback
  */
 struct rproc_ops {
 	int (*start)(struct rproc *rproc);
 	int (*stop)(struct rproc *rproc);
 	void (*kick)(struct rproc *rproc, int vqid);
+	int (*suspend)(struct rproc *rproc);
+	int (*resume)(struct rproc *rproc);
 };
 
 /**
@@ -384,6 +388,8 @@ enum rproc_state {
  * @rvdevs: list of remote virtio devices
  * @notifyids: idr for dynamically assigning rproc-wide unique notify ids
  * @index: index of this rproc device
+ * @pm_lock: lock used to protect kick function against suspend/resume
+ * @pm_comp: completion to block kick function when rproc is suspended
  */
 struct rproc {
 	struct klist_node node;
@@ -407,6 +413,8 @@ struct rproc {
 	struct list_head rvdevs;
 	struct idr notifyids;
 	int index;
+	struct mutex pm_lock;
+	struct completion pm_comp;
 };
 
 /* we currently support only two vrings per rvdev */

@@ -38,7 +38,20 @@ static void rproc_virtio_notify(struct virtqueue *vq)
 
 	dev_dbg(&rproc->dev, "kicking vq index: %d\n", notifyid);
 
+	/*
+	 * if rproc is suspended wait for resume. However we need to release
+	 * the lock because it is held in resume callback. For that reason,
+	 * after wait_for_completion we need to check the state again and make
+	 * sure the state is not suspended.
+	 */
+	mutex_lock(&rproc->pm_lock);
+	while (rproc->state == RPROC_SUSPENDED) {
+		mutex_unlock(&rproc->pm_lock);
+		wait_for_completion(&rproc->pm_comp);
+		mutex_lock(&rproc->pm_lock);
+	}
 	rproc->ops->kick(rproc, notifyid);
+	mutex_unlock(&rproc->pm_lock);
 }
 
 /**
