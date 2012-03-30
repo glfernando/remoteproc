@@ -331,15 +331,15 @@ struct rproc;
  * @start:	power on the device and boot it
  * @stop:	power off the device
  * @kick:	kick a virtqueue (virtqueue id given as a parameter)
- * @suspend	suspend callback
- * @resume	resume callback
+ * @suspend	suspend callback (auto_suspend flag as a parameter)
+ * @resume	resume callback (auto_suspend flag as a parameter)
  */
 struct rproc_ops {
 	int (*start)(struct rproc *rproc);
 	int (*stop)(struct rproc *rproc);
 	void (*kick)(struct rproc *rproc, int vqid);
-	int (*suspend)(struct rproc *rproc);
-	int (*resume)(struct rproc *rproc);
+	int (*suspend)(struct rproc *rproc, bool auto_suspend);
+	int (*resume)(struct rproc *rproc, bool auto_suspend);
 };
 
 /**
@@ -388,6 +388,8 @@ enum rproc_state {
  * @rvdevs: list of remote virtio devices
  * @notifyids: idr for dynamically assigning rproc-wide unique notify ids
  * @index: index of this rproc device
+ * @auto_autosuspend: flag that is set when a auto suspend happened
+ * @forced_suspend: flat that is set if suspend was forced
  */
 struct rproc {
 	struct klist_node node;
@@ -411,6 +413,9 @@ struct rproc {
 	struct list_head rvdevs;
 	struct idr notifyids;
 	int index;
+	bool auto_suspend;
+	int auto_suspend_timeout;
+	bool forced_suspend;
 };
 
 /* we currently support only two vrings per rvdev */
