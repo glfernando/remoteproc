@@ -26,6 +26,7 @@
 #include <linux/err.h>
 #include <linux/kref.h>
 #include <linux/slab.h>
+#include <linux/pm_runtime.h>
 
 #include "remoteproc_internal.h"
 
@@ -35,10 +36,17 @@ static void rproc_virtio_notify(struct virtqueue *vq)
 	struct rproc_vring *rvring = vq->priv;
 	struct rproc *rproc = rvring->rvdev->rproc;
 	int notifyid = rvring->notifyid;
+	struct device *dev = &rproc->dev;
 
-	dev_dbg(&rproc->dev, "kicking vq index: %d\n", notifyid);
+	dev_dbg(dev, "kicking vq index: %d\n", notifyid);
 
+	mutex_lock(&rproc->lock);
+	/* wakeup rproc before kick it */
+	pm_runtime_get_sync(dev);
 	rproc->ops->kick(rproc, notifyid);
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_put_autosuspend(dev);
+	mutex_unlock(&rproc->lock);
 }
 
 /**
