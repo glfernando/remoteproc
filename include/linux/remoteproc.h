@@ -332,6 +332,8 @@ struct rproc;
  * @start:	power on the device and boot it
  * @stop:	power off the device
  * @kick:	kick a virtqueue (virtqueue id given as a parameter)
+ * @suspend	uspend callback
+ * @resume	resume callback
  * @set_latency		set latency on remote processor
  * @set_bandwidth	set bandwidth on remote processor
  * @set_frequency	set frequency of remote processor
@@ -340,6 +342,8 @@ struct rproc_ops {
 	int (*start)(struct rproc *rproc);
 	int (*stop)(struct rproc *rproc);
 	void (*kick)(struct rproc *rproc, int vqid);
+	int (*suspend)(struct rproc *rproc);
+	int (*resume)(struct rproc *rproc);
 	int (*set_latency)(struct device *dev, struct rproc *rproc, long v);
 	int (*set_bandwidth)(struct device *dev, struct rproc *rproc, long v);
 	int (*set_frequency)(struct device *dev, struct rproc *rproc, long v);
@@ -417,6 +421,8 @@ enum rproc_err {
  * @crash_cnt: counter for fatal errors
  * @recovery_disabled: flag that state if recovery was disabled
  * @index: index of this rproc device
+ * @pm_lock: lock used to protect kick function against suspend/resume
+ * @pm_comp: completion to block kick function when rproc is suspended
  */
 struct rproc {
 	struct klist_node node;
@@ -443,6 +449,8 @@ struct rproc {
 	unsigned crash_cnt;
 	bool recovery_disabled;
 	int index;
+	struct mutex pm_lock;
+	struct completion pm_comp;
 };
 
 /* we currently support only two vrings per rvdev */
