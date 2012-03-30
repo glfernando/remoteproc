@@ -43,6 +43,8 @@
 
 #include "remoteproc_internal.h"
 
+#define dev_to_rproc(dev) container_of(dev, struct rproc, dev)
+
 typedef int (*rproc_handle_resources_t)(struct rproc *rproc,
 				struct resource_table *table, int len);
 typedef int (*rproc_handle_resource_t)(struct rproc *rproc, void *, int avail);
@@ -52,6 +54,60 @@ static DEFINE_IDA(rproc_dev_index);
 
 static const char * const rproc_crash_names[] = {
 	[RPROC_MMUFAULT]	= "mmufault",
+};
+
+static int rproc_resume(struct device *dev)
+{
+	struct rproc *rproc = dev_to_rproc(dev);
+	int ret = 0;
+
+	dev_dbg(dev, "Enter %s\n", __func__);
+
+	mutex_lock(&rproc->lock);
+	if (rproc->state != RPROC_SUSPENDED)
+		goto out;
+
+	if (rproc->ops->resume) {
+		ret = rproc->ops->resume(rproc);
+		if (ret) {
+			dev_err(dev, "resume failed %d\n", ret);
+			goto out;
+		}
+	}
+
+	rproc->state = RPROC_RUNNING;
+out:
+	mutex_unlock(&rproc->lock);
+	return ret;
+}
+
+static int rproc_suspend(struct device *dev)
+{
+	struct rproc *rproc = dev_to_rproc(dev);
+	int ret = 0;
+
+	dev_dbg(dev, "Enter %s\n", __func__);
+
+	mutex_lock(&rproc->lock);
+	if (rproc->state != RPROC_RUNNING)
+		goto out;
+
+	if (rproc->ops->suspend) {
+		ret = rproc->ops->suspend(rproc);
+		if (ret) {
+			dev_err(dev, "suspend failed %d\n", ret);
+			goto out;
+		}
+	}
+
+	rproc->state = RPROC_SUSPENDED;
+out:
+	mutex_unlock(&rproc->lock);
+	return ret;
+}
+
+static const struct dev_pm_ops rproc_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(rproc_suspend, rproc_resume)
 };
 
 /* translate rproc_crash_type to string */
@@ -1192,6 +1248,7 @@ static void rproc_type_release(struct device *dev)
 static struct device_type rproc_type = {
 	.name		= "remoteproc",
 	.release	= rproc_type_release,
+	.pm		= &rproc_pm_ops,
 };
 
 /**
