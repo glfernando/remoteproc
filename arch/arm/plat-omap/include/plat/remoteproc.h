@@ -20,6 +20,16 @@
 struct rproc_ops;
 struct platform_device;
 
+/* struct omap_rproc_timers_info - timers for the omap rproc
+ *
+ * @id: timer id to use by the remoteproc
+ * @odt: timer pointer
+ */
+struct omap_rproc_timers_info {
+	int id;
+	struct omap_dm_timer *odt;
+};
+
 /*
  * struct omap_rproc_pdata - omap remoteproc's platform data
  * @name: the remoteproc's name
@@ -30,6 +40,7 @@ struct platform_device;
  * @ops: start/stop rproc handlers
  * @device_enable: omap-specific handler for enabling a device
  * @device_shutdown: omap-specific handler for shutting down a device
+ * @omap_rproc_timers_info: timer(s) info rproc needs
  */
 struct omap_rproc_pdata {
 	const char *name;
@@ -38,8 +49,10 @@ struct omap_rproc_pdata {
 	const char *firmware;
 	const char *mbox_name;
 	const struct rproc_ops *ops;
+	struct omap_rproc_timers_info *timers;
 	int (*device_enable) (struct platform_device *pdev);
 	int (*device_shutdown) (struct platform_device *pdev);
+	u8 timers_cnt;
 };
 
 #if defined(CONFIG_OMAP_REMOTEPROC) || defined(CONFIG_OMAP_REMOTEPROC_MODULE)
