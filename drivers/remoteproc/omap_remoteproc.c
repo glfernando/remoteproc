@@ -32,6 +32,7 @@
 
 #include <plat/mailbox.h>
 #include <plat/remoteproc.h>
+#include <plat/omap-pm.h>
 
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
@@ -122,6 +123,50 @@ static void omap_rproc_kick(struct rproc *rproc, int vqid)
 		dev_err(rproc->dev, "omap_mbox_msg_send failed: %d\n", ret);
 }
 
+static int
+omap_rproc_set_latency(struct device *dev, struct rproc *rproc, long val)
+{
+	struct platform_device *pdev = to_platform_device(rproc->dev);
+	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
+
+	/* Call device specific api if any */
+	if (pdata->ops && pdata->ops->set_latency)
+		return pdata->ops->set_latency(dev, rproc, val);
+
+	pm_qos_update_request(rproc->qos_request, val);
+	return 0;
+}
+
+static int
+omap_rproc_set_bandwidth(struct device *dev, struct rproc *rproc, long val)
+{
+	struct platform_device *pdev = to_platform_device(rproc->dev);
+	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
+
+	/* Call device specific api if any */
+	if (pdata->ops && pdata->ops->set_bandwidth)
+		return pdata->ops->set_bandwidth(dev, rproc, val);
+
+	/* TODO: call platform specific */
+
+	return 0;
+}
+
+static int
+omap_rproc_set_frequency(struct device *dev, struct rproc *rproc, long val)
+{
+	struct platform_device *pdev = to_platform_device(rproc->dev);
+	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
+
+	/* Call device specific api if any */
+	if (pdata->ops && pdata->ops->set_frequency)
+		return pdata->ops->set_frequency(dev, rproc, val);
+
+	/* TODO: call platform specific */
+
+	return 0;
+}
+
 /*
  * Power up the remote processor.
  *
@@ -193,6 +238,9 @@ static struct rproc_ops omap_rproc_ops = {
 	.start		= omap_rproc_start,
 	.stop		= omap_rproc_stop,
 	.kick		= omap_rproc_kick,
+	.set_latency	= omap_rproc_set_latency,
+	.set_bandwidth	= omap_rproc_set_bandwidth,
+	.set_frequency	= omap_rproc_set_frequency,
 };
 
 static int __devinit omap_rproc_probe(struct platform_device *pdev)
