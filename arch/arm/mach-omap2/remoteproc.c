@@ -25,6 +25,7 @@
 #include <plat/omap_hwmod.h>
 #include <plat/remoteproc.h>
 #include <plat/iommu.h>
+#include <plat/omap-pm.h>
 
 /*
  * Temporarily define the CMA base address explicitly.
@@ -33,6 +34,23 @@
  * DMA API in place.
  */
 #define OMAP_RPROC_CMA_BASE	(0xa9000000)
+
+static int
+_ducati_set_bandwidth(struct device *dev, struct rproc *rproc, long val)
+{
+	return omap_pm_set_min_bus_tput(rproc->dev, OCP_INITIATOR_AGENT, val);
+}
+
+static int
+_ducati_set_frequency(struct device *dev, struct rproc *rproc, long val)
+{
+	return 0;
+}
+
+static struct rproc_ops ducati_ops = {
+	.set_bandwidth	= _ducati_set_bandwidth,
+	.set_frequency	= _ducati_set_frequency,
+};
 
 /*
  * These data structures define platform-specific information
@@ -49,6 +67,7 @@ static struct omap_rproc_pdata omap4_rproc_data[] = {
 		.mbox_name	= "mailbox-1",
 		.oh_name	= "ipu_c0",
 		.oh_name_opt  = "ipu_c1",
+		.ops		= &ducati_ops,
 	},
 };
 
