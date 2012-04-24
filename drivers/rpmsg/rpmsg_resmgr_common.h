@@ -47,4 +47,7 @@ struct rprm_i2c {
 	u32 id;
 };
 
+struct rprm_rproc {
+	char name[16];
+};
 #endif /* _LINUX_RPMSG_RESMGR_COMMON_H */
