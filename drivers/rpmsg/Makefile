@@ -4,3 +4,4 @@ obj-$(CONFIG_RPMSG_RESMGR) += rpmsg_resmgr_common.o
 obj-$(CONFIG_OMAP_RPMSG_RESMGR) += omap_rpmsg_resmgr.o
 obj-$(CONFIG_RPMSG_SERVER_SAMPLE) += rpmsg_server_sample.o
 obj-$(CONFIG_RPMSG_OMX) += rpmsg_omx.o
+obj-$(CONFIG_RPMSG_TEST) += rpmsg_test.o
