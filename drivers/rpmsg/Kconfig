@@ -51,4 +51,12 @@ config RPMSG_OMX
 
 	  If unsure, say N.
 
+config RPMSG_TEST
+	tristate "An rpmsg test sample"
+	depends on RPMSG
+	---help---
+	  An rpmsg driver that exposes some test to the user space in order
+	  to create test suite or stress tests
+	  Say either Y or M. You know you want to.
+
 endmenu
