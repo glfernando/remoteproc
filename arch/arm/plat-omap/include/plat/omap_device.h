@@ -124,6 +124,7 @@ int omap_device_deassert_hardreset(struct platform_device *pdev,
 				 const char *name);
 int omap_device_idle_hwmods(struct omap_device *od);
 int omap_device_enable_hwmods(struct omap_device *od);
+int omap_device_shutdown_hwmods(struct omap_device *od);
 
 int omap_device_disable_clocks(struct omap_device *od);
 int omap_device_enable_clocks(struct omap_device *od);
