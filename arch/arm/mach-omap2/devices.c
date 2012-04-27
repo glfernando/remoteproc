@@ -663,6 +663,22 @@ static void __init omap_init_fdif(void)
 	omap_init_dev("fdif");
 }
 
+static void __init omap_init_sl2if(void)
+{
+	if (!cpu_is_omap44xx() && !cpu_is_omap54xx())
+		return;
+
+	omap_init_dev("sl2if");
+}
+
+static void __init omap_init_iss(void)
+{
+	if (!cpu_is_omap44xx() && !cpu_is_omap54xx())
+		return;
+
+	omap_init_dev("iss");
+}
+
 /*-------------------------------------------------------------------------*/
 
 #if defined(CONFIG_HDQ_MASTER_OMAP) || defined(CONFIG_HDQ_MASTER_OMAP_MODULE)
@@ -747,6 +763,8 @@ static int __init omap2_init_devices(void)
 	omap_init_aes();
 	omap_init_vout();
 	omap_init_fdif();
+	omap_init_sl2if();
+	omap_init_iss();
 
 	return 0;
 }
