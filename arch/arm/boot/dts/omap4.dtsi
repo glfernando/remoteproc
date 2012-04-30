@@ -220,6 +220,11 @@
 			ti,hwmods = "i2c4";
 		};
 
+		mailbox: mailbox@4a0f4000 {
+			compatible = "ti,omap4-mailbox";
+			ti,hwmods = "mailbox";
+		};
+
 		mcspi1: spi@48098000 {
 			compatible = "ti,omap4-mcspi";
 			#address-cells = <1>;
