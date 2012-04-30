@@ -279,6 +279,9 @@ static inline void __init omap_init_mbox(void)
 	struct omap_hwmod *oh;
 	struct platform_device *pdev;
 
+	if (of_have_populated_dt())
+		return;
+
 	oh = omap_hwmod_lookup("mailbox");
 	if (!oh) {
 		pr_err("%s: unable to find hwmod\n", __func__);

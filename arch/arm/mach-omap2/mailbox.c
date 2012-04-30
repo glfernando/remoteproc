@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/clk.h>
 #include <linux/err.h>
+#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
@@ -479,12 +480,23 @@ static const struct dev_pm_ops mailbox_pm_ops = {
 			   NULL)
 };
 
+#if defined(CONFIG_OF)
+static const struct of_device_id omap_mailbox_of_match[] = {
+	{ .compatible = "ti,omap2-mailbox" },
+	{ .compatible = "ti,omap3-mailbox" },
+	{ .compatible = "ti,omap4-mailbox" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, omap_mailbox_of_match);
+#endif
+
 static struct platform_driver omap2_mbox_driver = {
 	.probe = omap2_mbox_probe,
 	.remove = __devexit_p(omap2_mbox_remove),
 	.driver = {
 		.name = "omap-mailbox",
 		.pm = &mailbox_pm_ops,
+		.of_match_table = of_match_ptr(omap_mailbox_of_match),
 	},
 };
 
