@@ -701,6 +701,10 @@ struct snd_soc_codec {
 	struct snd_soc_dapm_context dapm;
 	unsigned int ignore_pmdown_time:1; /* pmdown_time is ignored at stop */
 
+	/* dynamic mixer and enum controls */
+	struct list_head dmixers;
+	struct list_head denums;
+
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_codec_root;
 	struct dentry *debugfs_reg;
@@ -821,6 +825,10 @@ struct snd_soc_platform {
 	struct snd_soc_card *card;
 	struct list_head list;
 	struct list_head card_list;
+
+	/* dynamic mixer and enum controls */
+	struct list_head dmixers;
+	struct list_head denums;
 
 	struct snd_soc_dapm_context dapm;
 
@@ -1004,6 +1012,10 @@ struct snd_soc_card {
 	struct list_head dapm_list;
 	struct list_head dapm_dirty;
 
+	/* dynamic mixer and enum controls */
+	struct list_head dmixers;
+	struct list_head denums;
+
 	/* Generic DAPM context for the card */
 	struct snd_soc_dapm_context dapm;
 	struct snd_soc_dapm_stats dapm_stats;
@@ -1051,6 +1063,10 @@ struct snd_soc_pcm_runtime {
 struct soc_mixer_control {
 	int min, max, platform_max;
 	unsigned int reg, rreg, shift, rshift, invert;
+
+	/* dynamic controls */
+	struct list_head list;
+	struct snd_kcontrol *dcontrol;
 };
 
 struct soc_bytes {
@@ -1074,8 +1090,14 @@ struct soc_enum {
 	unsigned int max;
 	unsigned int mask;
 	const char * const *texts;
-	char **dtexts;
 	const unsigned int *values;
+
+	/* dynamic enum controls */
+	char **dtexts;
+	unsigned int *dvalues;
+	struct list_head list;
+	struct snd_kcontrol *dcontrol;
+
 	void *dapm;
 };
 

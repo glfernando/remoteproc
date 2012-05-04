@@ -2026,8 +2026,39 @@ static void snd_soc_dapm_sys_remove(struct device *dev)
 	device_remove_file(dev, &dev_attr_dapm_widget);
 }
 
+static void dapm_free_dynamic_widget_controls(struct snd_soc_dapm_widget *w)
+{
+	int i;
+
+	/*
+	 * Dynamic Widgets either have 1 enum kcontrol or 1..N mixers.
+	 * The enumm may either have an array of values or strings.
+	 */
+	if (w->denum) {
+		struct soc_enum *se =
+			(struct soc_enum *)w->kcontrols[0]->private_value;
+
+		if (se->dvalues)
+			kfree(se->dvalues);
+		else {
+			for (i = 0; i < se->max; i++)
+				kfree(se->dtexts[i]);
+		}
+		kfree(se);
+	} else if (w->dmixer) {
+
+		for (i = 0; i < w->num_kcontrols; i++) {
+			struct snd_kcontrol *kcontrol = w->kcontrols[i];
+			struct soc_mixer_control *sm =
+			(struct soc_mixer_control *) kcontrol->private_value;
+
+			kfree(sm);
+		}
+	}
+}
+
 /* free all dapm widgets and resources */
-static void dapm_free_widgets(struct snd_soc_dapm_context *dapm)
+void soc_dapm_free_widgets(struct snd_soc_dapm_context *dapm)
 {
 	struct snd_soc_dapm_widget *w, *next_w;
 	struct snd_soc_dapm_path *p, *next_p;
@@ -2055,6 +2086,9 @@ static void dapm_free_widgets(struct snd_soc_dapm_context *dapm)
 			kfree(p->long_name);
 			kfree(p);
 		}
+		/* check and free and dynamic widget kcontrols */
+		if (w->num_kcontrols)
+			dapm_free_dynamic_widget_controls(w);
 		kfree(w->kcontrols);
 		kfree(w->name);
 		kfree(w);
@@ -3742,7 +3776,7 @@ void snd_soc_dapm_free(struct snd_soc_dapm_context *dapm)
 {
 	snd_soc_dapm_sys_remove(dapm->dev);
 	dapm_debugfs_cleanup(dapm);
-	dapm_free_widgets(dapm);
+	soc_dapm_free_widgets(dapm);
 	list_del(&dapm->list);
 }
 EXPORT_SYMBOL_GPL(snd_soc_dapm_free);
