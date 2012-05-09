@@ -17,8 +17,11 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/stringify.h>
+#include <linux/clk.h>
 
 #include <plat/iommu.h>
+#include <plat/clock.h>
+#include "clockdomain.h"
 
 /*
  * omap2 architecture specific register bit definitions
@@ -133,8 +136,11 @@ static void omap2_iommu_disable(struct omap_iommu *obj)
 
 	l &= ~MMU_CNTL_MASK;
 	iommu_write_reg(obj, l, MMU_CNTL);
+	l = iommu_read_reg(obj, MMU_IRQSTATUS);
+	iommu_write_reg(obj, l, MMU_IRQSTATUS);
 	iommu_write_reg(obj, MMU_SYS_IDLE_FORCE, MMU_SYSCONFIG);
 
+	clkdm_allow_idle(obj->clk->clkdm);
 	dev_dbg(obj->dev, "%s is shutting down\n", obj->name);
 }
 
@@ -169,6 +175,8 @@ static u32 omap2_iommu_fault_isr(struct omap_iommu *obj, u32 *ra)
 	if (stat & MMU_IRQ_MULTIHITFAULT)
 		errs |= OMAP_IOMMU_ERR_MULTIHIT_FAULT;
 	iommu_write_reg(obj, stat, MMU_IRQSTATUS);
+
+	clkdm_deny_idle(obj->clk->clkdm);
 
 	return errs;
 }
