@@ -361,6 +361,17 @@ enum rproc_state {
 };
 
 /**
+ * enum rproc_err - remote processor errors
+ * @RPROC_ERR_MMUFAULT:	iommmu fault error
+ *
+ * Each element of the enum is used as an array index. So that, the value of
+ * the elements should be always something sane.
+ */
+enum rproc_err {
+	RPROC_ERR_MMUFAULT	= 0,
+};
+
+/**
  * struct rproc - represents a physical remote processor device
  * @node: klist node of this rproc object
  * @domain: iommu domain
@@ -382,6 +393,8 @@ enum rproc_state {
  * @rvdevs: list of remote virtio devices
  * @notifyids: idr for dynamically assigning rproc-wide unique notify ids
  * @index: index of this rproc device
+ * @error_handler: workqueue for reseting virtio devices
+ * @crash_cnt: counter for fatal errors
  */
 struct rproc {
 	struct klist_node node;
@@ -404,6 +417,8 @@ struct rproc {
 	struct list_head rvdevs;
 	struct idr notifyids;
 	int index;
+	struct work_struct error_handler;
+	unsigned crash_cnt;
 };
 
 /* we currently support only two vrings per rvdev */
