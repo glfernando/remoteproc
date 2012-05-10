@@ -5,6 +5,10 @@ config REMOTEPROC
 	tristate
 	depends on EXPERIMENTAL
 
+config REMOTEPROC_RECOVERY
+	bool "Reset virtio devices after a fatal error (RECOVERY)"
+	depends on REMOTEPROC
+
 # OMAP_REMOTEPROC depends on selection of IPU or DSP instances
 config OMAP_REMOTEPROC
 	tristate "OMAP remoteproc support"
