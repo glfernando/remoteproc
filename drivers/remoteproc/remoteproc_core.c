@@ -82,7 +82,7 @@ static DEFINE_IDA(rproc_dev_index);
  * the recovery of the remote processor.
  */
 static int rproc_iommu_fault(struct iommu_domain *domain, struct device *dev,
-		unsigned long iova, int flags)
+		unsigned long iova, int flags, void *token)
 {
 	dev_err(dev, "iommu fault: da 0x%lx flags 0x%x\n", iova, flags);
 
@@ -121,7 +121,7 @@ static int rproc_enable_iommu(struct rproc *rproc)
 		return -ENOMEM;
 	}
 
-	iommu_set_fault_handler(domain, rproc_iommu_fault);
+	iommu_set_fault_handler(domain, rproc_iommu_fault, rproc);
 
 	ret = iommu_attach_device(domain, dev);
 	if (ret) {
