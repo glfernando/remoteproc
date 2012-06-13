@@ -282,9 +282,6 @@
 #define snd_soc_get_enum_text(soc_enum, idx) \
 	(soc_enum->texts ? soc_enum->texts[idx] : soc_enum->dtexts[idx])
 
-/* DAI Link Host Mode Support */
-#define SND_SOC_DAI_LINK_NO_HOST		0x1
-#define SND_SOC_DAI_LINK_OPT_HOST		0x2
 
 /*
  * Component probe and remove ordering levels for components with runtime
