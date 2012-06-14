@@ -302,9 +302,36 @@ static struct platform_device omap_pcm = {
 	.id	= -1,
 };
 
+#if defined(CONFIG_SND_OMAP_SOC_VXREC) || defined(CONFIG_SND_OMAP_SOC_VXREC_MODULE)
+static struct platform_device omap_abe_vxrec = {
+	.name   = "omap-abe-vxrec-dai",
+	.id     = -1,
+};
+#endif
+
 static void omap_init_audio(void)
 {
+	struct omap_hwmod *oh_hdmi;
+	struct platform_device *od_hdmi;
+	char *oh_hdmi_name = "dss_hdmi";
+	char *dev_hdmi_name = "hdmi-audio-dai";
+
+	if (cpu_is_omap44xx()) {
+		oh_hdmi = omap_hwmod_lookup(oh_hdmi_name);
+		WARN(!oh_hdmi, "%s: could not find omap_hwmod for %s\n",
+			__func__, oh_hdmi_name);
+
+		od_hdmi = omap_device_build(dev_hdmi_name, -1, oh_hdmi, NULL, 0,
+			NULL, 0, false);
+		WARN(IS_ERR(od_hdmi), "%s: could not build omap_device for %s\n",
+			__func__, dev_hdmi_name);
+
+	}
+
 	platform_device_register(&omap_pcm);
+#if defined(CONFIG_SND_OMAP_SOC_VXREC) || defined(CONFIG_SND_OMAP_SOC_VXREC_MODULE)
+	platform_device_register(&omap_abe_vxrec);
+#endif
 }
 
 #else
