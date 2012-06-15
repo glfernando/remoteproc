@@ -213,7 +213,7 @@ static struct platform_device omap3isp_device = {
 };
 
 static struct omap_iommu_arch_data omap3_isp_iommu = {
-	.name = "isp",
+	.name = "isp_mmu",
 };
 
 int omap3_init_camera(struct isp_platform_data *pdata)
