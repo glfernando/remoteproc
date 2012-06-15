@@ -142,14 +142,22 @@ static int omap_rproc_start(struct rproc *rproc)
 		goto put_mbox;
 	}
 
+	ret = pdata->deassert_reset(pdev, "cpu0");
+	if (ret) {
+		dev_err(dev, "deassert_hardreset failed: %d\n", ret);
+		goto put_mbox;
+	}
+
 	ret = pdata->device_enable(pdev);
 	if (ret) {
 		dev_err(dev, "omap_device_enable failed: %d\n", ret);
-		goto put_mbox;
+		goto assert_reset;
 	}
 
 	return 0;
 
+assert_reset:
+	pdata->assert_reset(pdev, "cpu0");
 put_mbox:
 	omap_mbox_put(oproc->mbox, &oproc->nb);
 	return ret;
@@ -165,6 +173,10 @@ static int omap_rproc_stop(struct rproc *rproc)
 	int ret;
 
 	ret = pdata->device_shutdown(pdev);
+	if (ret)
+		return ret;
+
+	ret = pdata->assert_reset(pdev, "cpu0");
 	if (ret)
 		return ret;
 
