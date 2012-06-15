@@ -11,6 +11,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -25,6 +26,9 @@ static int __init omap_iommu_dev_init(struct omap_hwmod *oh, void *unused)
 	struct iommu_platform_data *pdata;
 	struct omap_mmu_dev_attr *a = (struct omap_mmu_dev_attr *)oh->dev_attr;
 	static int i;
+
+	if (of_have_populated_dt())
+		return 0;
 
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
