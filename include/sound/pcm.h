@@ -269,6 +269,7 @@ struct snd_pcm_hw_constraint_list {
 };
 
 struct snd_pcm_hwptr_log;
+struct dmaengine_pcm_runtime_data;
 
 struct snd_pcm_runtime {
 	/* -- Status -- */
@@ -345,6 +346,7 @@ struct snd_pcm_runtime {
 	unsigned char *dma_area;	/* DMA area */
 	dma_addr_t dma_addr;		/* physical bus address (not accessible from main CPU) */
 	size_t dma_bytes;		/* size of DMA area */
+	struct dmaengine_pcm_runtime_data *dmaengine_data;
 
 	struct snd_dma_buffer *dma_buffer_p;	/* allocated buffer */
 

@@ -40,7 +40,7 @@ struct dmaengine_pcm_runtime_data {
 static inline struct dmaengine_pcm_runtime_data *substream_to_prtd(
 	const struct snd_pcm_substream *substream)
 {
-	return substream->runtime->private_data;
+	return substream->runtime->dmaengine_data;
 }
 
 /**
