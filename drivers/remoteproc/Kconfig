@@ -11,6 +11,7 @@ config OMAP_REMOTEPROC
 	depends on EXPERIMENTAL
 	depends on ARCH_OMAP4
 	depends on OMAP_IOMMU
+	depends on CMA
 	select REMOTEPROC
 	select OMAP_MBOX_FWK
 	select RPMSG
