@@ -511,6 +511,7 @@ static void __devexit rprm_remove(struct rpmsg_channel *rpdev)
  * the rproc can be probed against this driver and then linked to the manager
  */
 static struct rpmsg_device_id rprm_id_table[] = {
+	{ .name = "rprm-ducati" },
 	{ },
 };
 MODULE_DEVICE_TABLE(platform, rprm_id_table);

@@ -278,3 +278,7 @@ obj-y					+= common-board-devices.o twl-common.o
 ifneq ($(CONFIG_OMAP_REMOTEPROC),)
 obj-y					+= remoteproc.o
 endif
+
+ifneq ($(CONFIG_OMAP_RPMSG_RESMGR),)
+obj-y					+= rpmsg_resmgr.o
+endif
