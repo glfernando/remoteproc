@@ -47,7 +47,7 @@ static bool filter(struct dma_chan *chan, void *param)
 static int snd_imx_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct dma_chan *chan = snd_dmaengine_pcm_get_chan(substream);
 	struct imx_pcm_dma_params *dma_params;
 	struct dma_slave_config slave_config;
@@ -99,7 +99,7 @@ static struct snd_pcm_hardware snd_imx_hardware = {
 
 static int snd_imx_open(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct imx_pcm_dma_params *dma_params;
 	struct imx_dma_data *dma_data;
 	int ret;

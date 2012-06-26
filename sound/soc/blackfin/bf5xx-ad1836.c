@@ -38,7 +38,7 @@ static struct snd_soc_card bf5xx_ad1836;
 static int bf5xx_ad1836_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	unsigned int channel_map[] = {0, 4, 1, 5, 2, 6, 3, 7};
 	int ret = 0;

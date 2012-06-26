@@ -139,7 +139,7 @@ static void s6000_i2s_stop_channel(struct s6000_i2s_dev *dev, int channel)
 
 static void s6000_i2s_start(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct s6000_i2s_dev *dev = snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	int channel;
 
@@ -151,7 +151,7 @@ static void s6000_i2s_start(struct snd_pcm_substream *substream)
 
 static void s6000_i2s_stop(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct s6000_i2s_dev *dev = snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	int channel;
 

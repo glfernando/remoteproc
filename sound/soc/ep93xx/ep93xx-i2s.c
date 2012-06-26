@@ -142,7 +142,7 @@ static void ep93xx_i2s_disable(struct ep93xx_i2s_info *info, int stream)
 static int ep93xx_i2s_startup(struct snd_pcm_substream *substream,
 			      struct snd_soc_dai *dai)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct ep93xx_i2s_info *info = snd_soc_dai_get_drvdata(dai);
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 

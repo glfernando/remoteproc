@@ -57,7 +57,7 @@ static void s6000_pcm_enqueue_dma(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct s6000_runtime_data *prtd = runtime->private_data;
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par;
 	int channel;
 	unsigned int period_size;
@@ -176,7 +176,7 @@ static irqreturn_t s6000_pcm_irq(int irq, void *data)
 static int s6000_pcm_start(struct snd_pcm_substream *substream)
 {
 	struct s6000_runtime_data *prtd = substream->runtime->private_data;
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par;
 	unsigned long flags;
 	int srcinc;
@@ -218,7 +218,7 @@ static int s6000_pcm_start(struct snd_pcm_substream *substream)
 static int s6000_pcm_stop(struct snd_pcm_substream *substream)
 {
 	struct s6000_runtime_data *prtd = substream->runtime->private_data;
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par;
 	unsigned long flags;
 	u32 channel;
@@ -244,7 +244,7 @@ static int s6000_pcm_stop(struct snd_pcm_substream *substream)
 
 static int s6000_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par;
 	int ret;
 
@@ -285,7 +285,7 @@ static int s6000_pcm_prepare(struct snd_pcm_substream *substream)
 
 static snd_pcm_uframes_t s6000_pcm_pointer(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct s6000_runtime_data *prtd = runtime->private_data;
@@ -317,7 +317,7 @@ static snd_pcm_uframes_t s6000_pcm_pointer(struct snd_pcm_substream *substream)
 
 static int s6000_pcm_open(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct s6000_runtime_data *prtd;
@@ -377,7 +377,7 @@ static int s6000_pcm_close(struct snd_pcm_substream *substream)
 static int s6000_pcm_hw_params(struct snd_pcm_substream *substream,
 				 struct snd_pcm_hw_params *hw_params)
 {
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par;
 	int ret;
 	ret = snd_pcm_lib_malloc_pages(substream,
@@ -407,7 +407,7 @@ static int s6000_pcm_hw_params(struct snd_pcm_substream *substream,
 
 static int s6000_pcm_hw_free(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct s6000_pcm_dma_params *par =
 		snd_soc_dai_get_dma_data(soc_runtime->cpu_dai, substream);
 

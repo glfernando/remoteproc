@@ -123,7 +123,7 @@ static int kirkwood_dma_open(struct snd_pcm_substream *substream)
 {
 	int err;
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct snd_soc_platform *platform = soc_runtime->platform;
 	struct snd_soc_dai *cpu_dai = soc_runtime->cpu_dai;
 	struct kirkwood_dma_data *priv;
@@ -194,7 +194,7 @@ static int kirkwood_dma_open(struct snd_pcm_substream *substream)
 
 static int kirkwood_dma_close(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct snd_soc_dai *cpu_dai = soc_runtime->cpu_dai;
 	struct snd_soc_platform *platform = soc_runtime->platform;
 	struct kirkwood_dma_priv *prdata = snd_soc_platform_get_drvdata(platform);
@@ -240,7 +240,7 @@ static int kirkwood_dma_hw_free(struct snd_pcm_substream *substream)
 static int kirkwood_dma_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct snd_soc_dai *cpu_dai = soc_runtime->cpu_dai;
 	struct kirkwood_dma_data *priv;
 	unsigned long size, count;
@@ -269,7 +269,7 @@ static int kirkwood_dma_prepare(struct snd_pcm_substream *substream)
 static snd_pcm_uframes_t kirkwood_dma_pointer(struct snd_pcm_substream
 						*substream)
 {
-	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->rtd;
 	struct snd_soc_dai *cpu_dai = soc_runtime->cpu_dai;
 	struct kirkwood_dma_data *priv;
 	snd_pcm_uframes_t count;

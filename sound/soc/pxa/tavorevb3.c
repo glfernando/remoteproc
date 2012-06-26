@@ -77,7 +77,7 @@ static const struct snd_soc_dapm_route evb3_audio_map[] = {
 static int evb3_i2s_hw_params(struct snd_pcm_substream *substream,
 			      struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int width = snd_pcm_format_physical_width(params_format(params));

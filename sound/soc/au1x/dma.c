@@ -200,7 +200,7 @@ static inline struct audio_stream *ss_to_as(struct snd_pcm_substream *ss)
 static int alchemy_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct alchemy_pcm_ctx *ctx = ss_to_ctx(substream);
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	int *dmaids, s = substream->stream;
 	char *name;
 

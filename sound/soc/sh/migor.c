@@ -49,7 +49,7 @@ static struct clk_lookup *siumckb_lookup;
 static int migor_hw_params(struct snd_pcm_substream *substream,
 			   struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret;
 	unsigned int rate = params_rate(params);
@@ -92,7 +92,7 @@ static int migor_hw_params(struct snd_pcm_substream *substream,
 
 static int migor_hw_free(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	if (use_count) {

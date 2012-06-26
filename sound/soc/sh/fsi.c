@@ -376,7 +376,7 @@ static int fsi_is_play(struct snd_pcm_substream *substream)
 
 static struct snd_soc_dai *fsi_get_dai(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 
 	return  rtd->cpu_dai;
 }

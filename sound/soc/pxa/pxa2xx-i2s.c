@@ -101,7 +101,7 @@ static struct pxa2xx_pcm_dma_params pxa2xx_i2s_pcm_stereo_in = {
 static int pxa2xx_i2s_startup(struct snd_pcm_substream *substream,
 			      struct snd_soc_dai *dai)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 
 	if (IS_ERR(clk_i2s))

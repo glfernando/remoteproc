@@ -294,7 +294,7 @@ au1xpsc_pcm_pointer(struct snd_pcm_substream *substream)
 static int au1xpsc_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct au1xpsc_audio_dmadata *pcd = to_dmadata(substream);
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	int stype = substream->stream, *dmaids;
 
 	dmaids = snd_soc_dai_get_dma_data(rtd->cpu_dai, substream);

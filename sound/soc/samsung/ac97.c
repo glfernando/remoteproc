@@ -226,7 +226,7 @@ static int s3c_ac97_hw_params(struct snd_pcm_substream *substream,
 				  struct snd_pcm_hw_params *params,
 				  struct snd_soc_dai *dai)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct s3c_dma_params *dma_data;
 
@@ -244,7 +244,7 @@ static int s3c_ac97_trigger(struct snd_pcm_substream *substream, int cmd,
 				struct snd_soc_dai *dai)
 {
 	u32 ac_glbctrl;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct s3c_dma_params *dma_data =
 		snd_soc_dai_get_dma_data(rtd->cpu_dai, substream);
 
@@ -284,7 +284,7 @@ static int s3c_ac97_hw_mic_params(struct snd_pcm_substream *substream,
 				      struct snd_pcm_hw_params *params,
 				      struct snd_soc_dai *dai)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
@@ -299,7 +299,7 @@ static int s3c_ac97_mic_trigger(struct snd_pcm_substream *substream,
 				    int cmd, struct snd_soc_dai *dai)
 {
 	u32 ac_glbctrl;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct s3c_dma_params *dma_data =
 		snd_soc_dai_get_dma_data(rtd->cpu_dai, substream);
 

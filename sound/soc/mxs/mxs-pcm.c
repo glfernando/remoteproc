@@ -90,7 +90,7 @@ static int snd_mxs_pcm_hw_params(struct snd_pcm_substream *substream,
 
 static int snd_mxs_open(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct mxs_pcm_dma_data *pcm_dma_data;
 	int ret;
 

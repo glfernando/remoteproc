@@ -67,7 +67,7 @@ static bool ep93xx_pcm_dma_filter(struct dma_chan *chan, void *filter_param)
 
 static int ep93xx_pcm_open(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct ep93xx_pcm_dma_params *dma_params;
 	struct ep93xx_dma_data *dma_data;

@@ -66,7 +66,7 @@ static void raumfeld_enable_audio(bool en)
 /* CS4270 */
 static int raumfeld_cs4270_startup(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	/* set freq to 0 to enable all possible codec sample rates */
@@ -75,7 +75,7 @@ static int raumfeld_cs4270_startup(struct snd_pcm_substream *substream)
 
 static void raumfeld_cs4270_shutdown(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	/* set freq to 0 to enable all possible codec sample rates */
@@ -85,7 +85,7 @@ static void raumfeld_cs4270_shutdown(struct snd_pcm_substream *substream)
 static int raumfeld_cs4270_hw_params(struct snd_pcm_substream *substream,
 				     struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	unsigned int fmt, clk = 0;
@@ -168,7 +168,7 @@ static int raumfeld_analog_resume(struct snd_soc_card *card)
 static int raumfeld_ak4104_hw_params(struct snd_pcm_substream *substream,
 				     struct snd_pcm_hw_params *params)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int fmt, ret = 0, clk = 0;

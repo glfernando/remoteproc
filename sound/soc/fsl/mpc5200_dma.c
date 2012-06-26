@@ -108,7 +108,7 @@ static int psc_dma_hw_free(struct snd_pcm_substream *substream)
  */
 static int psc_dma_trigger(struct snd_pcm_substream *substream, int cmd)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct psc_dma *psc_dma = snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct psc_dma_stream *s = to_psc_dma_stream(substream, psc_dma);
@@ -213,7 +213,7 @@ static const struct snd_pcm_hardware psc_dma_hardware = {
 static int psc_dma_open(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct psc_dma *psc_dma = snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	struct psc_dma_stream *s;
 	int rc;
@@ -240,7 +240,7 @@ static int psc_dma_open(struct snd_pcm_substream *substream)
 
 static int psc_dma_close(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct psc_dma *psc_dma = snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	struct psc_dma_stream *s;
 
@@ -265,7 +265,7 @@ static int psc_dma_close(struct snd_pcm_substream *substream)
 static snd_pcm_uframes_t
 psc_dma_pointer(struct snd_pcm_substream *substream)
 {
-	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_pcm_runtime *rtd = substream->rtd;
 	struct psc_dma *psc_dma = snd_soc_dai_get_drvdata(rtd->cpu_dai);
 	struct psc_dma_stream *s;
 	dma_addr_t count;
