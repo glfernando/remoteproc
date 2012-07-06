@@ -4111,6 +4111,13 @@ int snd_soc_card_new_dai_links(struct snd_soc_card *card,
 }
 EXPORT_SYMBOL_GPL(snd_soc_card_new_dai_links);
 
+void snd_soc_card_reset_dai_links(struct snd_soc_card *card)
+{
+	card->dai_link = NULL;
+	card->num_links = 0;
+}
+EXPORT_SYMBOL_GPL(snd_soc_card_reset_dai_links);
+
 /* Retrieve a card's name from device tree */
 int snd_soc_of_parse_card_name(struct snd_soc_card *card,
 			       const char *propname)
