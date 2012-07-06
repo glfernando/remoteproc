@@ -70,6 +70,20 @@ typedef int (*rproc_handle_resource_t)(struct rproc *rproc, void *, int avail);
 /* Unique indices for remoteproc devices */
 static DEFINE_IDA(rproc_dev_index);
 
+static const char * const rproc_err_names[] = {
+	[RPROC_ERR_MMUFAULT]	= "mmufault",
+	[RPROC_ERR_WATCHDOG]	= "watchdog fired",
+	[RPROC_ERR_EXCEPTION]	= "device exception",
+};
+
+/* translate rproc_err to string */
+static const char *rproc_err_to_string(enum rproc_err type)
+{
+	if (type < ARRAY_SIZE(rproc_err_names))
+		return rproc_err_names[type];
+	return "unkown";
+}
+
 /*
  * This is the IOMMU fault handler we register with the IOMMU API
  * (when relevant; not all remote processors access memory through
@@ -84,7 +98,11 @@ static DEFINE_IDA(rproc_dev_index);
 static int rproc_iommu_fault(struct iommu_domain *domain, struct device *dev,
 		unsigned long iova, int flags, void *token)
 {
+	struct rproc *rproc = token;
+
 	dev_err(dev, "iommu fault: da 0x%lx flags 0x%x\n", iova, flags);
+
+	rproc_error_reporter(rproc, RPROC_ERR_MMUFAULT);
 
 	/*
 	 * Let the iommu core know we're not really handling this fault;
@@ -1123,6 +1141,35 @@ out:
 }
 
 /**
+ * rproc_error_handler_work() - handle a faltar error
+ *
+ * This function needs to handle everything related to a fatal error,
+ * like cpu registers and stack dump, information to help to
+ * debug the fatal error, etc.
+ */
+static void rproc_error_handler_work(struct work_struct *work)
+{
+	struct rproc *rproc = container_of(work, struct rproc, error_handler);
+	struct device *dev = &rproc->dev;
+
+	dev_dbg(dev, "enter %s\n", __func__);
+
+	mutex_lock(&rproc->lock);
+	if (rproc->state == RPROC_CRASHED) {
+		/* handle only the first error detected */
+		mutex_unlock(&rproc->lock);
+		return;
+	}
+
+	rproc->state = RPROC_CRASHED;
+	dev_err(&rproc->dev, "handling fatal error #%u in %s\n",
+		++rproc->crash_cnt, rproc->name);
+	mutex_unlock(&rproc->lock);
+
+	/* TODO: handle errror */
+}
+
+/**
  * rproc_boot() - boot a remote processor
  * @rproc: handle of a remote processor
  *
@@ -1533,6 +1580,8 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 	INIT_LIST_HEAD(&rproc->traces);
 	INIT_LIST_HEAD(&rproc->rvdevs);
 
+	INIT_WORK(&rproc->error_handler, rproc_error_handler_work);
+
 	rproc->state = RPROC_OFFLINE;
 
 	return rproc;
@@ -1600,6 +1649,28 @@ int rproc_unregister(struct rproc *rproc)
 	return 0;
 }
 EXPORT_SYMBOL(rproc_unregister);
+
+/**
+ * rproc_error_reporter() - rproc error reporter function
+ * @rproc: remote processor
+ * @type: fatal error
+ *
+ * This function must be called every time a fatal error is detected by
+ * the low level drivers implementing a specific remoteproc. This
+ * should not be called from a non-remoteproc driver.
+ */
+void rproc_error_reporter(struct rproc *rproc, enum rproc_err type)
+{
+	if (!rproc)
+		return;
+
+	dev_err(&rproc->dev, "fatal error detected in %s: error type %s\n",
+		rproc->name, rproc_err_to_string(type));
+
+	/* create a new task to handle the error */
+	schedule_work(&rproc->error_handler);
+}
+EXPORT_SYMBOL(rproc_error_reporter);
 
 static int __init remoteproc_init(void)
 {
