@@ -959,8 +959,9 @@ static void rproc_error_handler_work(struct work_struct *work)
 		++rproc->crash_cnt, rproc->name);
 	mutex_unlock(&rproc->lock);
 
-	/* try to recover the remoteproc */
-	rproc_try_to_recover(rproc);
+	/* if recovery enabled try to recover the remoteproc */
+	if (!rproc->recovery_disabled)
+		rproc_try_to_recover(rproc);
 }
 
 /**
