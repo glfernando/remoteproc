@@ -882,6 +882,36 @@ out:
 }
 
 /**
+ * rproc_trigger_recover() - recover a remoteproc
+ * @rproc: the remote processor
+ *
+ * The recovery is done by reseting all the virtio devices, that way all the
+ * rpmsg drivers will be reseted along with the remote processor making the
+ * remoteproc functional again.
+ *
+ * This function can sleep, so that it cannot be called from atomic context.
+ */
+int rproc_trigger_recover(struct rproc *rproc)
+{
+	struct rproc_vdev *rvdev, *rvtmp;
+
+	dev_err(&rproc->dev, "recovering %s\n", rproc->name);
+
+	init_completion(&rproc->crash_comp);
+	/* clean up remote vdev entries */
+	list_for_each_entry_safe(rvdev, rvtmp, &rproc->rvdevs, node)
+		rproc_remove_virtio_dev(rvdev);
+
+	/* wait until there is no more rproc users */
+	wait_for_completion(&rproc->crash_comp);
+
+	/* run rproc_fw_config_virtio to create vdevs again */
+	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+			rproc->firmware, &rproc->dev, GFP_KERNEL,
+			rproc, rproc_fw_config_virtio);
+}
+
+/**
  * rproc_crash_handler_work() - handle a crash
  *
  * This function needs to handle everything related to a crash, like cpu
@@ -906,7 +936,7 @@ static void rproc_crash_handler_work(struct work_struct *work)
 		++rproc->crash_cnt, rproc->name);
 	mutex_unlock(&rproc->lock);
 
-	/* TODO: handle crash */
+	rproc_trigger_recover(rproc);
 }
 
 /**
@@ -1029,6 +1059,10 @@ void rproc_shutdown(struct rproc *rproc)
 	rproc_resource_cleanup(rproc);
 
 	rproc_disable_iommu(rproc);
+
+	/* if in crash state, unlock crash handler */
+	if (rproc->state == RPROC_CRASHED)
+		complete_all(&rproc->crash_comp);
 
 	rproc->state = RPROC_OFFLINE;
 
@@ -1204,6 +1238,7 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 	INIT_LIST_HEAD(&rproc->rvdevs);
 
 	INIT_WORK(&rproc->crash_handler, rproc_crash_handler_work);
+	init_completion(&rproc->crash_comp);
 
 	rproc->state = RPROC_OFFLINE;
 
