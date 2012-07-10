@@ -43,4 +43,6 @@ void rproc_exit_debugfs(void);
 
 void rproc_free_vring(struct rproc_vring *rvring);
 int rproc_alloc_vring(struct rproc_vdev *rvdev, int i);
+
+void rproc_try_to_recover(struct rproc *rproc);
 #endif /* REMOTEPROC_INTERNAL_H */

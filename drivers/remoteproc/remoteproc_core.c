@@ -1141,6 +1141,50 @@ out:
 }
 
 /**
+ * _reset_all_vdev() - reset all virtio devices
+ * @rproc: the remote processor
+ *
+ * This function reset all the rpmsg driver and also the remoteproc. That must
+ * not be called during normal use cases, it could be used as a last resource
+ * in the error handler to make a recovery of the remoteproc. This function can
+ * sleep, so that it cannot be called from atomic context.
+ */
+static int _reset_all_vdev(struct rproc *rproc)
+{
+	struct rproc_vdev *rvdev, *rvtmp;
+
+	dev_dbg(&rproc->dev, "reseting virtio devices for %s\n", rproc->name);
+	/* clean up remote vdev entries */
+	list_for_each_entry_safe(rvdev, rvtmp, &rproc->rvdevs, node)
+		rproc_remove_virtio_dev(rvdev);
+
+	/* run rproc_fw_config_virtio to create vdevs again */
+	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
+			rproc->firmware, &rproc->dev, GFP_KERNEL,
+			rproc, rproc_fw_config_virtio);
+}
+
+/**
+ * rproc_to_try_recover() - try to recovery a remoteproc
+ * @rproc: the remote processor
+ *
+ * This function will try to recover a remoteproc only if the state of the
+ * rproc is RPROC_CRASHED.
+ *
+ * The recovery is done by reseting all the virtio devices, that way all the
+ * rpmsg drivers will be reseted along with the remote processor making the
+ * remoteproc functional again.
+ */
+void rproc_try_to_recover(struct rproc *rproc)
+{
+	if (rproc->state != RPROC_CRASHED)
+		return;
+
+	dev_err(&rproc->dev, "trying to recover %s\n", rproc->name);
+	_reset_all_vdev(rproc);
+}
+
+/**
  * rproc_error_handler_work() - handle a faltar error
  *
  * This function needs to handle everything related to a fatal error,
@@ -1166,7 +1210,9 @@ static void rproc_error_handler_work(struct work_struct *work)
 		++rproc->crash_cnt, rproc->name);
 	mutex_unlock(&rproc->lock);
 
-	/* TODO: handle errror */
+	/* if recovery enabled try a recover the remoteproc */
+	if (!rproc->recovery_disabled)
+		rproc_try_to_recover(rproc);
 }
 
 /**
