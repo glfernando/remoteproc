@@ -936,7 +936,8 @@ static void rproc_crash_handler_work(struct work_struct *work)
 		++rproc->crash_cnt, rproc->name);
 	mutex_unlock(&rproc->lock);
 
-	rproc_trigger_recover(rproc);
+	if (!rproc->recovery_disabled)
+		rproc_trigger_recover(rproc);
 }
 
 /**
