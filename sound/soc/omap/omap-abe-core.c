@@ -285,9 +285,12 @@ static int abe_probe(struct snd_soc_platform *platform)
 		goto err_irq;
 	}
 
-	ret = abe_opp_init_initial_opp(abe);
-	if (ret < 0)
-		goto err_opp;
+	if (!soc_is_omap54xx()) {
+		/* No OPP definition for OMAP5 inside the tree */
+		ret = abe_opp_init_initial_opp(abe);
+		if (ret < 0)
+			goto err_opp;
+	}
 
 	/* aess_clk has to be enabled to access hal register.
 	 * Disable the clk after it has been used.
