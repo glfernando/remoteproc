@@ -97,7 +97,7 @@ void omap_iommu_save_ctx(struct device *dev)
 {
 	struct omap_iommu *obj = dev_to_omap_iommu(dev);
 
-	arch_iommu->save_ctx(obj);
+	pm_runtime_put_sync(obj->dev);
 }
 EXPORT_SYMBOL_GPL(omap_iommu_save_ctx);
 
@@ -109,7 +109,7 @@ void omap_iommu_restore_ctx(struct device *dev)
 {
 	struct omap_iommu *obj = dev_to_omap_iommu(dev);
 
-	arch_iommu->restore_ctx(obj);
+	pm_runtime_get_sync(obj->dev);
 }
 EXPORT_SYMBOL_GPL(omap_iommu_restore_ctx);
 
@@ -1000,11 +1000,36 @@ static int __devexit omap_iommu_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int omap_iommu_runtime_suspend(struct device *dev)
+{
+	struct omap_iommu *obj = to_iommu(dev);
+
+	arch_iommu->save_ctx(obj);
+
+	return 0;
+}
+
+static int omap_iommu_runtime_resume(struct device *dev)
+{
+	struct omap_iommu *obj = to_iommu(dev);
+
+	arch_iommu->restore_ctx(obj);
+
+	return 0;
+}
+
+static const struct dev_pm_ops iommu_pm_ops = {
+	SET_RUNTIME_PM_OPS(omap_iommu_runtime_suspend,
+			   omap_iommu_runtime_resume,
+			   NULL)
+};
+
 static struct platform_driver omap_iommu_driver = {
 	.probe	= omap_iommu_probe,
 	.remove	= __devexit_p(omap_iommu_remove),
 	.driver	= {
 		.name	= "omap-iommu",
+		.pm	= &iommu_pm_ops,
 	},
 };
 
