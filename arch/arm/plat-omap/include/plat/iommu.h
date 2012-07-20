@@ -27,6 +27,13 @@ struct iotlb_entry {
 	};
 };
 
+/* context registers */
+struct iommu_regs {
+	u32 irqen;
+	u32 cntl;
+	u32 ttb;
+};
+
 struct omap_iommu {
 	const char	*name;
 	struct module	*owner;
@@ -50,7 +57,8 @@ struct omap_iommu {
 	struct list_head	mmap;
 	struct mutex		mmap_lock; /* protect mmap */
 
-	void *ctx; /* iommu context: registres saved area */
+	struct iommu_regs context;
+	int ctx_loss_cnt;
 	u32 da_start;
 	u32 da_end;
 };
