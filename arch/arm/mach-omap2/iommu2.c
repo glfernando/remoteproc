@@ -19,6 +19,7 @@
 #include <linux/stringify.h>
 
 #include <plat/iommu.h>
+#include <plat/omap-pm.h>
 
 /*
  * omap2 architecture specific register bit definitions
@@ -55,20 +56,26 @@
 
 static void __iommu_set_twl(struct omap_iommu *obj, bool on)
 {
-	u32 l = iommu_read_reg(obj, MMU_CNTL);
+	u32 l;
 
 	if (on)
-		iommu_write_reg(obj, MMU_IRQ_TWL_MASK, MMU_IRQENABLE);
+		l = MMU_IRQ_TWL_MASK;
 	else
-		iommu_write_reg(obj, MMU_IRQ_TLB_MISS_MASK, MMU_IRQENABLE);
+		l = MMU_IRQ_TLB_MISS_MASK;
 
+	iommu_write_reg(obj, l, MMU_IRQENABLE);
+	obj->context.irqen = l;
+
+	l = iommu_read_reg(obj, MMU_CNTL);
 	l &= ~MMU_CNTL_MASK;
+
 	if (on)
 		l |= (MMU_CNTL_MMU_EN | MMU_CNTL_TWL_EN);
 	else
 		l |= (MMU_CNTL_MMU_EN);
 
 	iommu_write_reg(obj, l, MMU_CNTL);
+	obj->context.cntl = l;
 }
 
 
@@ -88,6 +95,7 @@ static int omap2_iommu_enable(struct omap_iommu *obj)
 		 (l >> 4) & 0xf, l & 0xf);
 
 	iommu_write_reg(obj, pa, MMU_TTB);
+	obj->context.ttb = pa;
 
 	__iommu_set_twl(obj, true);
 
@@ -100,6 +108,7 @@ static void omap2_iommu_disable(struct omap_iommu *obj)
 
 	l &= ~MMU_CNTL_MASK;
 	iommu_write_reg(obj, l, MMU_CNTL);
+	obj->context.cntl = l;
 
 	dev_dbg(obj->dev, "%s is shutting down\n", obj->name);
 }
@@ -249,28 +258,17 @@ out:
 
 static void omap2_iommu_save_ctx(struct omap_iommu *obj)
 {
-	int i;
-	u32 *p = obj->ctx;
-
-	for (i = 0; i < (MMU_REG_SIZE / sizeof(u32)); i++) {
-		p[i] = iommu_read_reg(obj, i * sizeof(u32));
-		dev_dbg(obj->dev, "%s\t[%02d] %08x\n", __func__, i, p[i]);
-	}
-
-	BUG_ON(p[0] != IOMMU_ARCH_VERSION);
+	obj->ctx_loss_cnt = omap_pm_get_dev_context_loss_count(obj->dev);
 }
 
 static void omap2_iommu_restore_ctx(struct omap_iommu *obj)
 {
-	int i;
-	u32 *p = obj->ctx;
+	if (omap_pm_get_dev_context_loss_count(obj->dev) == obj->ctx_loss_cnt)
+		return;
 
-	for (i = 0; i < (MMU_REG_SIZE / sizeof(u32)); i++) {
-		iommu_write_reg(obj, p[i], i * sizeof(u32));
-		dev_dbg(obj->dev, "%s\t[%02d] %08x\n", __func__, i, p[i]);
-	}
-
-	BUG_ON(p[0] != IOMMU_ARCH_VERSION);
+	iommu_write_reg(obj, obj->context.ttb, MMU_TTB);
+	iommu_write_reg(obj, obj->context.irqen, MMU_IRQENABLE);
+	iommu_write_reg(obj, obj->context.cntl, MMU_CNTL);
 }
 
 static void omap2_cr_to_e(struct cr_regs *cr, struct iotlb_entry *e)
