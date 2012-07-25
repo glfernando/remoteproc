@@ -400,11 +400,42 @@ static int __devexit omap2_mbox_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int _mailbox_runtime_suspend(struct device *dev, void *data)
+{
+	struct omap_mbox *mbox = dev_get_drvdata(dev);
+	omap2_mbox_save_ctx(mbox);
+	return 0;
+}
+
+static int omap_mailbox_runtime_suspend(struct device *dev)
+{
+	return device_for_each_child(dev, NULL, _mailbox_runtime_suspend);
+}
+
+static int _mailbox_runtime_resume(struct device *dev, void *data)
+{
+	struct omap_mbox *mbox = dev_get_drvdata(dev);
+	omap2_mbox_restore_ctx(mbox);
+	return 0;
+}
+
+static int omap_mailbox_runtime_resume(struct device *dev)
+{
+	return device_for_each_child(dev, NULL, _mailbox_runtime_resume);
+}
+
+static const struct dev_pm_ops mailbox_pm_ops = {
+	SET_RUNTIME_PM_OPS(omap_mailbox_runtime_suspend,
+			   omap_mailbox_runtime_resume,
+			   NULL)
+};
+
 static struct platform_driver omap2_mbox_driver = {
 	.probe = omap2_mbox_probe,
 	.remove = __devexit_p(omap2_mbox_remove),
 	.driver = {
 		.name = "omap-mailbox",
+		.pm = &mailbox_pm_ops,
 	},
 };
 
