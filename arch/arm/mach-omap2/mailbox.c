@@ -33,12 +33,11 @@
 #define MAILBOX_IRQ_NEWMSG(m)		(1 << (2 * (m)))
 #define MAILBOX_IRQ_NOTFULL(m)		(1 << (2 * (m) + 1))
 
-#define MBOX_REG_SIZE			0x120
-
-#define OMAP4_MBOX_REG_SIZE		0x130
-
-#define MBOX_NR_REGS			(MBOX_REG_SIZE / sizeof(u32))
-#define OMAP4_MBOX_NR_REGS		(OMAP4_MBOX_REG_SIZE / sizeof(u32))
+/*
+ * As per TRM, omap mailboxes are limited to 4 messages per mailbox
+ * in the hardware queue.
+ */
+#define MAX_MSG_HW_QUEUE		4
 
 static void __iomem *mbox_base;
 
@@ -48,6 +47,14 @@ struct omap_mbox2_fifo {
 	unsigned long msg_stat;
 };
 
+struct mbox_context {
+	unsigned long tx_msg[MAX_MSG_HW_QUEUE];
+	unsigned long tx_msg_stat;
+	unsigned long rx_msg[MAX_MSG_HW_QUEUE];
+	unsigned long rx_msg_stat;
+	unsigned long irqenable_bit;
+};
+
 struct omap_mbox2_priv {
 	struct omap_mbox2_fifo tx_fifo;
 	struct omap_mbox2_fifo rx_fifo;
@@ -55,8 +62,8 @@ struct omap_mbox2_priv {
 	unsigned long irqstatus;
 	u32 newmsg_bit;
 	u32 notfull_bit;
-	u32 ctx[OMAP4_MBOX_NR_REGS];
 	unsigned long irqdisable;
+	struct mbox_context ctx;
 };
 
 static void omap2_mbox_enable_irq(struct omap_mbox *mbox,
@@ -122,15 +129,31 @@ static int omap2_mbox_fifo_full(struct omap_mbox *mbox)
 }
 
 /* Mailbox IRQ handle functions */
+static void _omap2_mbox_enable_irq(u32 bit, unsigned long irqenable)
+{
+	u32 l = mbox_read_reg(irqenable);
+	l |= bit;
+	mbox_write_reg(l, irqenable);
+}
+
 static void omap2_mbox_enable_irq(struct omap_mbox *mbox,
 		omap_mbox_type_t irq)
 {
 	struct omap_mbox2_priv *p = mbox->priv;
-	u32 l, bit = (irq == IRQ_TX) ? p->notfull_bit : p->newmsg_bit;
+	u32 bit = (irq == IRQ_TX) ? p->notfull_bit : p->newmsg_bit;
 
-	l = mbox_read_reg(p->irqenable);
-	l |= bit;
-	mbox_write_reg(l, p->irqenable);
+	_omap2_mbox_enable_irq(bit, p->irqenable);
+
+	/* For context purposes, we don't care saving irqdisable registers */
+	p->ctx.irqenable_bit |= bit;
+}
+
+static void _omap2_mbox_disable_irq(u32 bit, unsigned long irqdisable)
+{
+	if (!cpu_is_omap44xx())
+		bit = mbox_read_reg(irqdisable) & ~bit;
+
+	mbox_write_reg(bit, irqdisable);
 }
 
 static void omap2_mbox_disable_irq(struct omap_mbox *mbox,
@@ -139,10 +162,10 @@ static void omap2_mbox_disable_irq(struct omap_mbox *mbox,
 	struct omap_mbox2_priv *p = mbox->priv;
 	u32 bit = (irq == IRQ_TX) ? p->notfull_bit : p->newmsg_bit;
 
-	if (!cpu_is_omap44xx())
-		bit = mbox_read_reg(p->irqdisable) & ~bit;
+	_omap2_mbox_disable_irq(bit, p->irqdisable);
 
-	mbox_write_reg(bit, p->irqdisable);
+	/* For context purposes, we don't care saving irqdisable registers */
+	p->ctx.irqenable_bit &= ~bit;
 }
 
 static void omap2_mbox_ack_irq(struct omap_mbox *mbox,
@@ -172,34 +195,56 @@ static void omap2_mbox_save_ctx(struct omap_mbox *mbox)
 {
 	int i;
 	struct omap_mbox2_priv *p = mbox->priv;
-	int nr_regs;
-	if (cpu_is_omap44xx())
-		nr_regs = OMAP4_MBOX_NR_REGS;
-	else
-		nr_regs = MBOX_NR_REGS;
-	for (i = 0; i < nr_regs; i++) {
-		p->ctx[i] = mbox_read_reg(i * sizeof(u32));
 
-		dev_dbg(mbox->dev, "%s: [%02x] %08x\n", __func__,
-			i, p->ctx[i]);
-	}
+	/*
+	 * Disable not-full irq, otherwise it will be triggered as soon
+	 * as the pending messages are saved.
+	 */
+	if (p->ctx.irqenable_bit & p->notfull_bit)
+		_omap2_mbox_disable_irq(p->notfull_bit, p->irqdisable);
+
+	/* Save pending messages in TX fifo */
+	p->ctx.tx_msg_stat = mbox_read_reg(p->tx_fifo.msg_stat);
+	for (i = 0; i < p->ctx.tx_msg_stat; i++)
+		p->ctx.tx_msg[i] = mbox_read_reg(p->tx_fifo.msg);
+
+	if (unlikely(mbox_read_reg(p->tx_fifo.msg_stat) != 0))
+		pr_warn("spurious tx messages not saved\n");
+
+	/* Save pending messages in RX fifo */
+	p->ctx.rx_msg_stat = mbox_read_reg(p->rx_fifo.msg_stat);
+	for (i = 0; i < p->ctx.rx_msg_stat; i++)
+		p->ctx.rx_msg[i] = mbox_read_reg(p->rx_fifo.msg);
+
+	if (unlikely(mbox_read_reg(p->rx_fifo.msg_stat) != 0))
+		pr_warn("spurious rx messages not saved\n");
 }
 
 static void omap2_mbox_restore_ctx(struct omap_mbox *mbox)
 {
 	int i;
 	struct omap_mbox2_priv *p = mbox->priv;
-	int nr_regs;
-	if (cpu_is_omap44xx())
-		nr_regs = OMAP4_MBOX_NR_REGS;
-	else
-		nr_regs = MBOX_NR_REGS;
-	for (i = 0; i < nr_regs; i++) {
-		mbox_write_reg(p->ctx[i], i * sizeof(u32));
 
-		dev_dbg(mbox->dev, "%s: [%02x] %08x\n", __func__,
-			i, p->ctx[i]);
-	}
+	/* Restore pending messages in TX fifo */
+	if (unlikely(mbox_read_reg(p->tx_fifo.msg_stat)))
+		pr_warn("Unexpected messages in TX queue\n");
+
+	for (i = 0; i < p->ctx.tx_msg_stat; i++)
+		mbox_write_reg(p->ctx.tx_msg[i], p->tx_fifo.msg);
+
+	/* Save pending messages in RX fifo */
+	if (unlikely(mbox_read_reg(p->rx_fifo.msg_stat)))
+		pr_warn("Unexpected messages in RX queue\n");
+
+	for (i = 0; i < p->ctx.rx_msg_stat; i++)
+		mbox_write_reg(p->ctx.rx_msg[i], p->rx_fifo.msg);
+
+	/* Enable interrupt bits */
+	if (p->ctx.irqenable_bit & p->notfull_bit)
+		_omap2_mbox_enable_irq(p->notfull_bit, p->irqenable);
+
+	if (p->ctx.irqenable_bit & p->newmsg_bit)
+		_omap2_mbox_enable_irq(p->newmsg_bit, p->irqenable);
 }
 
 static struct omap_mbox_ops omap2_mbox_ops = {
@@ -233,6 +278,7 @@ static struct omap_mbox2_priv omap2_mbox_dsp_priv = {
 	.tx_fifo = {
 		.msg		= MAILBOX_MESSAGE(0),
 		.fifo_stat	= MAILBOX_FIFOSTATUS(0),
+		.msg_stat	= MAILBOX_MSGSTATUS(0),
 	},
 	.rx_fifo = {
 		.msg		= MAILBOX_MESSAGE(1),
@@ -262,6 +308,7 @@ static struct omap_mbox2_priv omap2_mbox_iva_priv = {
 	.tx_fifo = {
 		.msg		= MAILBOX_MESSAGE(2),
 		.fifo_stat	= MAILBOX_FIFOSTATUS(2),
+		.msg_stat	= MAILBOX_MSGSTATUS(2),
 	},
 	.rx_fifo = {
 		.msg		= MAILBOX_MESSAGE(3),
@@ -297,6 +344,7 @@ static struct omap_mbox2_priv omap2_mbox_1_priv = {
 	.tx_fifo = {
 		.msg		= MAILBOX_MESSAGE(0),
 		.fifo_stat	= MAILBOX_FIFOSTATUS(0),
+		.msg_stat	= MAILBOX_MSGSTATUS(0),
 	},
 	.rx_fifo = {
 		.msg		= MAILBOX_MESSAGE(1),
@@ -319,6 +367,7 @@ static struct omap_mbox2_priv omap2_mbox_2_priv = {
 	.tx_fifo = {
 		.msg		= MAILBOX_MESSAGE(3),
 		.fifo_stat	= MAILBOX_FIFOSTATUS(3),
+		.msg_stat	= MAILBOX_MSGSTATUS(3),
 	},
 	.rx_fifo = {
 		.msg		= MAILBOX_MESSAGE(2),
