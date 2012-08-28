@@ -678,11 +678,12 @@ static int omap_abe_add_dai_links(struct snd_soc_card *card,
 {
 	struct omap_abe_data *card_data = snd_soc_card_get_drvdata(card);
 	struct device_node *node = card->dev->of_node;
-	struct device_node *dai_node, *aess_node;
 	int ret, i;
 
 
 	if (node) {
+		struct device_node *dai_node, *aess_node;
+
 		aess_node = of_parse_phandle(node, "ti,aess", 0);
 		if (!aess_node) {
 			dev_err(card->dev, "AESS node is not provided\n");
@@ -710,9 +711,23 @@ static int omap_abe_add_dai_links(struct snd_soc_card *card,
 			abe_be_dmic_dai[i].platform_of_node = aess_node;
 		}
 
+		dai_node = of_parse_phandle(node, "ti,mcbsp1", 0);
+		if (!dai_node) {
+			dev_err(card->dev,"McBSP1 node is not provided\n");
+			return -EINVAL;
+		}
+		abe_be_mcbsp1_dai.cpu_dai_name  = NULL;
+		abe_be_mcbsp1_dai.cpu_of_node = dai_node;
 		abe_be_mcbsp1_dai.platform_name  = NULL;
 		abe_be_mcbsp1_dai.platform_of_node = aess_node;
 
+		dai_node = of_parse_phandle(node, "ti,mcbsp2", 0);
+		if (!dai_node) {
+			dev_err(card->dev,"McBSP2 node is not provided\n");
+			return -EINVAL;
+		}
+		abe_be_mcbsp2_dai.cpu_dai_name  = NULL;
+		abe_be_mcbsp2_dai.cpu_of_node = dai_node;
 		abe_be_mcbsp2_dai.platform_name  = NULL;
 		abe_be_mcbsp2_dai.platform_of_node = aess_node;
 	}
@@ -764,6 +779,14 @@ static int omap_abe_add_legacy_dai_links(struct snd_soc_card *card,
 				dev_err(card->dev, "McPDM node is not provided\n");
 				return -EINVAL;
 		}
+
+		dai_node = of_parse_phandle(node, "ti,mcbsp2", 0);
+		if (!dai_node) {
+			dev_err(card->dev,"McBSP2 node is not provided\n");
+			return -EINVAL;
+		}
+		legacy_mcbsp_dai.cpu_dai_name  = NULL;
+		legacy_mcbsp_dai.cpu_of_node = dai_node;
 
 	}
 	/* Add the Legacy McPDM */
