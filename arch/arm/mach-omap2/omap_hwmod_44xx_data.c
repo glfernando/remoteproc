@@ -640,7 +640,7 @@ static struct omap_hwmod_irq_info omap44xx_dsp_irqs[] = {
 };
 
 static struct omap_hwmod_rst_info omap44xx_dsp_resets[] = {
-	{ .name = "dsp", .rst_shift = 0 },
+	{ .name = "cpu0", .rst_shift = 0 },
 };
 
 static struct omap_hwmod omap44xx_dsp_hwmod = {
