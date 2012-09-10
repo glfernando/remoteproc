@@ -656,7 +656,8 @@ static rproc_handle_resource_t rproc_handle_rsc[] = {
 
 /* handle firmware resource entries before booting the remote processor */
 static int
-rproc_handle_boot_rsc(struct rproc *rproc, struct resource_table *table, int len)
+rproc_handle_boot_rsc(struct rproc *rproc, struct resource_table *table,
+									int len)
 {
 	struct device *dev = &rproc->dev;
 	rproc_handle_resource_t handler;
@@ -695,7 +696,8 @@ rproc_handle_boot_rsc(struct rproc *rproc, struct resource_table *table, int len
 
 /* handle firmware resource entries while registering the remote processor */
 static int
-rproc_handle_virtio_rsc(struct rproc *rproc, struct resource_table *table, int len)
+rproc_handle_virtio_rsc(struct rproc *rproc, struct resource_table *table,
+									int len)
 {
 	struct device *dev = &rproc->dev;
 	int ret = 0, i;
@@ -749,7 +751,8 @@ static void rproc_resource_cleanup(struct rproc *rproc)
 
 	/* clean up carveout allocations */
 	list_for_each_entry_safe(entry, tmp, &rproc->carveouts, node) {
-		dma_free_coherent(dev->parent, entry->len, entry->va, entry->dma);
+		dma_free_coherent(dev->parent, entry->len, entry->va,
+								entry->dma);
 		list_del(&entry->node);
 		kfree(entry);
 	}
