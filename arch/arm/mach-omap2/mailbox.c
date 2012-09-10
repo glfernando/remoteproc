@@ -245,7 +245,7 @@ static struct omap_mbox2_priv omap2_mbox_dsp_priv = {
 	.irqdisable	= MAILBOX_IRQENABLE(0),
 };
 
-struct omap_mbox mbox_dsp_info = {
+static struct omap_mbox mbox_dsp_info = {
 	.name	= "dsp",
 	.ops	= &omap2_mbox_ops,
 	.priv	= &omap2_mbox_dsp_priv,
@@ -253,7 +253,7 @@ struct omap_mbox mbox_dsp_info = {
 #endif
 
 #if defined(CONFIG_ARCH_OMAP3)
-struct omap_mbox *omap3_mboxes[] = { &mbox_dsp_info, NULL };
+static struct omap_mbox *omap3_mboxes[] = { &mbox_dsp_info, NULL };
 #endif
 
 #if defined(CONFIG_SOC_OMAP2420)
@@ -282,7 +282,7 @@ static struct omap_mbox mbox_iva_info = {
 #endif
 
 #ifdef CONFIG_ARCH_OMAP2
-struct omap_mbox *omap2_mboxes[] = {
+static struct omap_mbox *omap2_mboxes[] = {
 	&mbox_dsp_info,
 #ifdef CONFIG_SOC_OMAP2420
 	&mbox_iva_info,
@@ -309,7 +309,7 @@ static struct omap_mbox2_priv omap2_mbox_1_priv = {
 	.irqdisable	= OMAP4_MAILBOX_IRQENABLE_CLR(0),
 };
 
-struct omap_mbox mbox_1_info = {
+static struct omap_mbox mbox_1_info = {
 	.name	= "mailbox-1",
 	.ops	= &omap2_mbox_ops,
 	.priv	= &omap2_mbox_1_priv,
@@ -331,13 +331,13 @@ static struct omap_mbox2_priv omap2_mbox_2_priv = {
 	.irqdisable     = OMAP4_MAILBOX_IRQENABLE_CLR(0),
 };
 
-struct omap_mbox mbox_2_info = {
+static struct omap_mbox mbox_2_info = {
 	.name	= "mailbox-2",
 	.ops	= &omap2_mbox_ops,
 	.priv	= &omap2_mbox_2_priv,
 };
 
-struct omap_mbox *omap4_mboxes[] = { &mbox_1_info, &mbox_2_info, NULL };
+static struct omap_mbox *omap4_mboxes[] = { &mbox_1_info, &mbox_2_info, NULL };
 #endif
 
 static int __devinit omap2_mbox_probe(struct platform_device *pdev)
