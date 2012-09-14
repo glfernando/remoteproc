@@ -30,6 +30,7 @@
 
 #include <plat/mailbox.h>
 #include <plat/remoteproc.h>
+#include <plat/dmtimer.h>
 
 #include "omap_remoteproc.h"
 #include "remoteproc_internal.h"
@@ -120,7 +121,8 @@ static int omap_rproc_start(struct rproc *rproc)
 	struct device *dev = rproc->dev.parent;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
-	int ret;
+	struct omap_rproc_timers_info *timers = pdata->timers;
+	int ret, i;
 
 	/* load remote processor boot address if needed. */
 	if (oproc->boot_reg)
@@ -137,22 +139,34 @@ static int omap_rproc_start(struct rproc *rproc)
 	}
 
 	/*
-	 * Ping the remote processor. this is only for sanity-sake;
+	 * ping the remote processor. this is only for sanity-sake;
 	 * there is no functional effect whatsoever.
 	 *
-	 * Note that the reply will _not_ arrive immediately: this message
+	 * note that the reply will _not_ arrive immediately: this message
 	 * will wait in the mailbox fifo until the remote processor is booted.
 	 */
 	ret = omap_mbox_msg_send(oproc->mbox, RP_MBOX_ECHO_REQUEST);
 	if (ret) {
-		dev_err(dev, "omap_mbox_get failed: %d\n", ret);
+		dev_err(dev, "omap_mbox_msg_send failed: %d\n", ret);
 		goto put_mbox;
+	}
+
+	for (i = 0; i < pdata->timers_cnt; i++) {
+		timers[i].odt = omap_dm_timer_request_specific(timers[i].id);
+		if (!timers[i].odt) {
+			ret = -EBUSY;
+			dev_err(dev, "request for timer %d failed: %d\n",
+							timers[i].id, ret);
+			goto err_timers;
+		}
+		omap_dm_timer_set_source(timers[i].odt, OMAP_TIMER_SRC_SYS_CLK);
+		omap_dm_timer_start(timers[i].odt);
 	}
 
 	ret = pdata->deassert_reset(pdev, "cpu0");
 	if (ret) {
 		dev_err(dev, "deassert_hardreset failed: %d\n", ret);
-		goto put_mbox;
+		goto err_timers;
 	}
 
 	ret = pdata->device_enable(pdev);
@@ -165,6 +179,12 @@ static int omap_rproc_start(struct rproc *rproc)
 
 assert_reset:
 	pdata->assert_reset(pdev, "cpu0");
+err_timers:
+	while (i--) {
+		omap_dm_timer_stop(timers[i].odt);
+		omap_dm_timer_free(timers[i].odt);
+		timers[i].odt = NULL;
+	}
 put_mbox:
 	omap_mbox_put(oproc->mbox, &oproc->nb);
 	return ret;
@@ -177,7 +197,8 @@ static int omap_rproc_stop(struct rproc *rproc)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
 	struct omap_rproc *oproc = rproc->priv;
-	int ret;
+	struct omap_rproc_timers_info *timers = pdata->timers;
+	int ret, i;
 
 	ret = pdata->device_shutdown(pdev);
 	if (ret)
@@ -186,6 +207,12 @@ static int omap_rproc_stop(struct rproc *rproc)
 	ret = pdata->assert_reset(pdev, "cpu0");
 	if (ret)
 		return ret;
+
+	for (i = 0; i < pdata->timers_cnt; i++) {
+		omap_dm_timer_stop(timers[i].odt);
+		omap_dm_timer_free(timers[i].odt);
+		timers[i].odt = NULL;
+	}
 
 	omap_mbox_put(oproc->mbox, &oproc->nb);
 

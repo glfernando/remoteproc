@@ -21,6 +21,17 @@ struct rproc_ops;
 struct platform_device;
 
 /*
+ * struct omap_rproc_timers_info - timers for the omap rproc
+ *
+ * @id: timer id to use by the remoteproc
+ * @odt: timer pointer
+ */
+struct omap_rproc_timers_info {
+	int id;
+	struct omap_dm_timer *odt;
+};
+
+/*
  * struct omap_rproc_pdata - omap remoteproc's platform data
  * @name: the remoteproc's name
  * @oh_name: omap hwmod device
@@ -28,9 +39,11 @@ struct platform_device;
  * @firmware: name of firmware file to load
  * @mbox_name: name of omap mailbox device to use with this rproc
  * @ops: start/stop rproc handlers
+ * @omap_rproc_timers_info: timer(s) info rproc needs
  * @device_enable: omap-specific handler for enabling a device
  * @device_shutdown: omap-specific handler for shutting down a device
  * @boot_reg: physical address of the control register for storing boot address
+ * @timers_cnt: number of rproc timer(s)
  */
 struct omap_rproc_pdata {
 	const char *name;
@@ -39,12 +52,14 @@ struct omap_rproc_pdata {
 	const char *firmware;
 	const char *mbox_name;
 	const struct rproc_ops *ops;
+	struct omap_rproc_timers_info *timers;
 	int (*device_enable) (struct platform_device *pdev);
 	int (*device_shutdown) (struct platform_device *pdev);
 
 	int (*assert_reset)(struct platform_device *pdev, const char *name);
 	int (*deassert_reset)(struct platform_device *pdev, const char *name);
 	u32 boot_reg;
+	u8 timers_cnt;
 };
 
 #if defined(CONFIG_OMAP_REMOTEPROC) || defined(CONFIG_OMAP_REMOTEPROC_MODULE)
