@@ -68,7 +68,7 @@ config OMAP_REMOTEPROC_DSP
 config OMAP_TESLA_CMA_SIZE
 	hex "Tesla dsp physically contiguous memory pool size (in bytes)"
 	depends on OMAP_REMOTEPROC_DSP
-	default 0x500000
+	default 0x700000
 	help
 	  Allocate a specified size of physically contiguous memory (CMA)
 	  for OMAP's dsp "Tesla" sub-system. Vast majority of this
