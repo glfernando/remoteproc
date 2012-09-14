@@ -383,6 +383,7 @@ enum rproc_state {
  * @rvdevs: list of remote virtio devices
  * @notifyids: idr for dynamically assigning rproc-wide unique notify ids
  * @index: index of this rproc device
+ * @fw_version: human readable version information extracted from f/w
  */
 struct rproc {
 	struct klist_node node;
@@ -406,6 +407,7 @@ struct rproc {
 	struct list_head rvdevs;
 	struct idr notifyids;
 	int index;
+	char *fw_version;
 };
 
 /* we currently support only two vrings per rvdev */
