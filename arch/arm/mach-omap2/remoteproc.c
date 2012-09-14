@@ -40,8 +40,8 @@
  * This will go away as soon as we have the IOMMU-based generic
  * DMA API in place.
  */
-#define OMAP_RPROC_CMA_BASE_IPU	(0x99800000)
-#define OMAP_RPROC_CMA_BASE_DSP	(0x99000000)
+#define OMAP_RPROC_CMA_BASE_IPU	(0x99000000)
+#define OMAP_RPROC_CMA_BASE_DSP	(0x98800000)
 
 /*
  * These data structures define platform-specific information
