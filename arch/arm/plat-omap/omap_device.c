@@ -953,6 +953,7 @@ int omap_device_assert_hardreset(struct platform_device *pdev, const char *name)
 
 	return ret;
 }
+EXPORT_SYMBOL(omap_device_assert_hardreset);
 
 /**
  * omap_device_deassert_hardreset - lift a device's reset line
@@ -976,6 +977,7 @@ int omap_device_deassert_hardreset(struct platform_device *pdev,
 
 	return ret;
 }
+EXPORT_SYMBOL(omap_device_deassert_hardreset);
 
 /**
  * omap_device_align_pm_lat - activate/deactivate device to match wakeup lat lim
