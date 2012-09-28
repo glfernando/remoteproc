@@ -158,7 +158,7 @@ static int __init omap2_rprm_init(void)
 	struct omap_rprm_pdata *pdata = &omap2_rprm_data;
 	int ret;
 
-	if (cpu_is_omap54xx()) {
+	if (soc_is_omap54xx()) {
 		auxclks = omap5_auxclks;
 		auxclk_cnt = ARRAY_SIZE(omap5_auxclks);
 	} else if (cpu_is_omap44xx()) {
