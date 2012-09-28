@@ -1579,7 +1579,7 @@ static int _deassert_hardreset(struct omap_hwmod *oh, const char *name)
 static int _read_hardreset(struct omap_hwmod *oh, const char *name)
 {
 	struct omap_hwmod_rst_info ohri;
-	u8 ret = -EINVAL;
+	int ret = -EINVAL;
 
 	if (!oh)
 		return -EINVAL;
