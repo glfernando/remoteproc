@@ -47,12 +47,21 @@
 #define OMAP4_RPROC_CMA_BASE_DSP	(0x98800000)
 
 #ifdef CONFIG_OMAP_REMOTEPROC_IPU
+static const char * const ipu_rst_names[] = {
+	"cpu0",
+	"cpu1",
+};
+
 static struct omap_rproc_timers_info ipu_timers[] = {
 	{ .id = 3 },
 };
 #endif
 
 #ifdef CONFIG_OMAP_REMOTEPROC_DSP
+static const char * const dsp_rst_names[] = {
+	"dsp",
+};
+
 static struct omap_rproc_timers_info dsp_timers[] = {
 	{ .id = 5 },
 };
@@ -78,6 +87,8 @@ static struct omap_rproc_pdata omap4_rproc_data[] = {
 		.boot_reg	= OMAP4430_CONTROL_DSP_BOOTADDR,
 		.timers		= dsp_timers,
 		.timers_cnt	= ARRAY_SIZE(dsp_timers),
+		.rst_names	= dsp_rst_names,
+		.rst_cnt	= ARRAY_SIZE(dsp_rst_names),
 	},
 #endif
 #ifdef CONFIG_OMAP_REMOTEPROC_IPU
@@ -90,6 +101,8 @@ static struct omap_rproc_pdata omap4_rproc_data[] = {
 		.deassert_reset	= omap_device_deassert_hardreset,
 		.timers		= ipu_timers,
 		.timers_cnt	= ARRAY_SIZE(ipu_timers),
+		.rst_names	= ipu_rst_names,
+		.rst_cnt	= ARRAY_SIZE(ipu_rst_names),
 	},
 #endif
 };
