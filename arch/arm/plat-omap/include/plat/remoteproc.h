@@ -44,6 +44,8 @@ struct omap_rproc_timers_info {
  * @device_shutdown: omap-specific handler for shutting down a device
  * @boot_reg: physical address of the control register for storing boot address
  * @timers_cnt: number of rproc timer(s)
+ * @rst_names: names of the rproc reset lines
+ * @rst_cnt: number of rproc reset lines
  */
 struct omap_rproc_pdata {
 	const char *name;
@@ -60,6 +62,8 @@ struct omap_rproc_pdata {
 	int (*deassert_reset)(struct platform_device *pdev, const char *name);
 	u32 boot_reg;
 	u8 timers_cnt;
+	const char * const *rst_names;
+	u8 rst_cnt;
 };
 
 #if defined(CONFIG_OMAP_REMOTEPROC) || defined(CONFIG_OMAP_REMOTEPROC_MODULE)

@@ -122,7 +122,7 @@ static int omap_rproc_start(struct rproc *rproc)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
 	struct omap_rproc_timers_info *timers = pdata->timers;
-	int ret, i;
+	int ret, i, j;
 
 	/* load remote processor boot address if needed. */
 	if (oproc->boot_reg)
@@ -163,7 +163,8 @@ static int omap_rproc_start(struct rproc *rproc)
 		omap_dm_timer_start(timers[i].odt);
 	}
 
-	ret = pdata->deassert_reset(pdev, "cpu0");
+	for (j = 0; j < pdata->rst_cnt; j++)
+		ret = pdata->deassert_reset(pdev, pdata->rst_names[j]);
 	if (ret) {
 		dev_err(dev, "deassert_hardreset failed: %d\n", ret);
 		goto err_timers;
@@ -198,13 +199,14 @@ static int omap_rproc_stop(struct rproc *rproc)
 	struct omap_rproc_pdata *pdata = pdev->dev.platform_data;
 	struct omap_rproc *oproc = rproc->priv;
 	struct omap_rproc_timers_info *timers = pdata->timers;
-	int ret, i;
+	int ret, i, j;
 
 	ret = pdata->device_shutdown(pdev);
 	if (ret)
 		return ret;
 
-	ret = pdata->assert_reset(pdev, "cpu0");
+	for (j = 0; j < pdata->rst_cnt; j++)
+		ret = pdata->deassert_reset(pdev, pdata->rst_names[j]);
 	if (ret)
 		return ret;
 
