@@ -56,8 +56,8 @@ static struct omap_rprm_auxclk omap4_auxclks[] = {
 
 static const char * const omap5_pauxclks[] = {
 	"sys_clkin",
-	"dpll_core_m3x2_opt_ck",
-	"dpll_per_m3x2_opt_ck",
+	"dpll_core_m3x2_ck",
+	"dpll_per_m3x2_ck",
 };
 
 static struct omap_rprm_auxclk omap5_auxclks[] = {
