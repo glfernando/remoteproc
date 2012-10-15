@@ -27,6 +27,7 @@
 #include <plat/dma.h>
 #include <plat/dmtimer.h>
 #include <plat/omap-pm.h>
+#include <plat/omap_device.h>
 #include <plat/rpmsg_resmgr.h>
 #include "omap_rpmsg_resmgr.h"
 
@@ -63,6 +64,17 @@ static struct omap_rprm_ops *mach_ops;
 static inline struct device *__find_device_by_name(const char *name)
 {
 	return bus_find_device_by_name(&platform_bus_type, NULL, name);
+}
+
+static struct device *rprm_find_device_by_name(const char *name)
+{
+	struct device *dev;
+
+	dev = __find_device_by_name(name);
+	if (dev && !pm_runtime_enabled(dev))
+		pm_runtime_enable(dev);
+
+	return dev;
 }
 
 static int rprm_gptimer_request(void **handle, void *data, size_t len)
@@ -469,23 +481,11 @@ static int rprm_regulator_get_info(void *handle, char *buf, size_t len)
 		rd->oreg->name, reg->min_uv, reg->max_uv, rd->orig_uv);
 }
 
-static int
-_enable_device_exclusive(void **handle, struct device **pdev, const char *name)
+static int _enable_device_reset(void **handle, struct device *dev,
+				const char *rst_name, bool exclusive)
 {
-	struct device *dev = *pdev;
 	struct rprm_gen_device_handle *rprm_handle;
 	int ret;
-
-	/* if we already have dev do not search it again */
-	if (!dev) {
-		dev = __find_device_by_name(name);
-		if (!dev)
-			return -ENOENT;
-		if (dev && !pm_runtime_enabled(dev))
-			pm_runtime_enable(dev);
-		/* update pdev that works as cache to avoid searing again */
-		*pdev = dev;
-	}
 
 	rprm_handle = kzalloc(sizeof *rprm_handle, GFP_KERNEL);
 	if (!rprm_handle)
@@ -496,20 +496,30 @@ _enable_device_exclusive(void **handle, struct device **pdev, const char *name)
 	if (ret < 0)
 		goto err_handle_free;
 
+	if (rst_name)
+		ret = omap_device_deassert_hardreset(
+					to_platform_device(dev), rst_name);
+	if (ret < 0)
+		goto err_qos_free;
+
 	ret = pm_runtime_get_sync(dev);
-	if (ret) {
-		/*
-		 * we want exclusive accesss to the device, so if it is already
-		 * enabled (ret == 1), call pm_runtime_put because somebody
-		 * else is using it and return error.
-		 */
-		if (ret == 1) {
+	/*
+	 * if we want exclusive accesss to the device and it is already
+	 * enabled (ret == 1), call pm_runtime_put because somebody
+	 * else is using it and return error.
+	 */
+	if (ret == 1) {
+		if (exclusive) {
 			pm_runtime_put_sync(dev);
 			ret = -EBUSY;
+		} else {
+			ret = 0;
 		}
+	}
 
-		pr_err("error %d get sync for %s\n", ret, name);
-		goto err_qos_free;
+	if (ret) {
+		pr_err("error %d get sync for %s\n", ret, dev_name(dev));
+		goto err_reset;
 	}
 
 	rprm_handle->dev = dev;
@@ -517,6 +527,9 @@ _enable_device_exclusive(void **handle, struct device **pdev, const char *name)
 
 	return 0;
 
+err_reset:
+	if (rst_name)
+		omap_device_assert_hardreset(to_platform_device(dev), rst_name);
 err_qos_free:
 	dev_pm_qos_remove_request(&rprm_handle->req);
 err_handle_free:
@@ -524,15 +537,31 @@ err_handle_free:
 	return ret;
 }
 
-static int _device_release(void *handle)
+static int
+_enable_device_exclusive(void **handle, struct device *dev)
+{
+	return _enable_device_reset(handle, dev, NULL, true);
+}
+
+static int _device_release_reset(void *handle, const char *rst_name)
 {
 	struct rprm_gen_device_handle *obj = handle;
 	struct device *dev = obj->dev;
+	int ret;
 
 	dev_pm_qos_remove_request(&obj->req);
 	kfree(obj);
 
-	return pm_runtime_put_sync(dev);
+	ret = pm_runtime_put_sync(dev);
+	if (rst_name)
+		omap_device_assert_hardreset(to_platform_device(dev), rst_name);
+
+	return ret;
+}
+
+static int _device_release(void *handle)
+{
+	return _device_release_reset(handle, NULL);
 }
 
 static int _device_scale(struct device *rdev, void *handle, unsigned long val)
@@ -570,35 +599,71 @@ static int rprm_iva_request(void **handle, void *data, size_t len)
 {
 	static struct device *dev;
 
-	return  _enable_device_exclusive(handle, &dev, "iva.0");
+	dev = dev ? : rprm_find_device_by_name("iva.0");
+	if (!dev)
+		return -ENOENT;
+
+	return _enable_device_reset(handle, dev, "logic", true);
+}
+
+static int rprm_iva_release(void *handle)
+{
+	return _device_release_reset(handle, "logic");
 }
 
 static int rprm_iva_seq0_request(void **handle, void *data, size_t len)
 {
 	static struct device *dev;
 
-	return _enable_device_exclusive(handle, &dev, "iva_seq0.0");
+	dev = dev ? : rprm_find_device_by_name("iva.0");
+	if (!dev)
+		return -ENOENT;
+
+	*handle = dev;
+	return omap_device_deassert_hardreset(to_platform_device(dev), "seq0");
+}
+
+static int rprm_iva_seq0_release(void *handle)
+{
+	return omap_device_assert_hardreset(to_platform_device(handle), "seq0");
 }
 
 static int rprm_iva_seq1_request(void **handle, void *data, size_t len)
 {
 	static struct device *dev;
 
-	return _enable_device_exclusive(handle, &dev, "iva_seq1.0");
+	dev = dev ? : rprm_find_device_by_name("iva.0");
+	if (!dev)
+		return -ENOENT;
+	*handle = dev;
+	return omap_device_deassert_hardreset(to_platform_device(dev), "seq1");
+}
+
+static int rprm_iva_seq1_release(void *handle)
+{
+	return omap_device_assert_hardreset(to_platform_device(handle), "seq1");
 }
 
 static int rprm_fdif_request(void **handle, void *data, size_t len)
 {
 	static struct device *dev;
 
-	return _enable_device_exclusive(handle, &dev, "fdif");
+	dev = dev ? : rprm_find_device_by_name("fdif");
+	if (!dev)
+		return -ENOENT;
+
+	return _enable_device_exclusive(handle, dev);
 }
 
 static int rprm_sl2if_request(void **handle, void *data, size_t len)
 {
 	static struct device *dev;
 
-	return _enable_device_exclusive(handle, &dev, "sl2if");
+	dev = dev ? : rprm_find_device_by_name("sl2if");
+	if (!dev)
+		return -ENOENT;
+
+	return _enable_device_exclusive(handle, dev);
 }
 
 static struct clk *iss_opt_clk;
@@ -608,6 +673,10 @@ static int rprm_iss_request(void **handle, void *data, size_t len)
 	static struct device *dev;
 	int ret;
 
+	dev = dev ? : rprm_find_device_by_name("iss");
+	if (!dev)
+		return -ENOENT;
+
 	/* enable the iss optional clock, if present */
 	if (iss_opt_clk) {
 		ret = clk_enable(iss_opt_clk);
@@ -615,7 +684,7 @@ static int rprm_iss_request(void **handle, void *data, size_t len)
 			return ret;
 	}
 
-	return _enable_device_exclusive(handle, &dev, "iss");
+	return _enable_device_exclusive(handle, dev);
 }
 
 static int rprm_iss_release(void *handle)
@@ -656,7 +725,7 @@ static struct rprm_res_ops regulator_ops = {
 
 static struct rprm_res_ops iva_ops = {
 	.request = rprm_iva_request,
-	.release = _device_release,
+	.release = rprm_iva_release,
 	.latency = _device_latency,
 	.bandwidth = _device_bandwidth,
 	.scale = _device_scale,
@@ -664,12 +733,12 @@ static struct rprm_res_ops iva_ops = {
 
 static struct rprm_res_ops iva_seq0_ops = {
 	.request = rprm_iva_seq0_request,
-	.release = _device_release,
+	.release = rprm_iva_seq0_release,
 };
 
 static struct rprm_res_ops iva_seq1_ops = {
 	.request = rprm_iva_seq1_request,
-	.release = _device_release,
+	.release = rprm_iva_seq1_release,
 };
 
 static struct rprm_res_ops fdif_ops = {
