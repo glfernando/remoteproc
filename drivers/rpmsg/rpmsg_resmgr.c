@@ -76,6 +76,9 @@ static struct rprm_constraints_data def_data = {
 static LIST_HEAD(res_table);
 static DEFINE_SPINLOCK(table_lock);
 
+/* resmgr debugfs parent dir */
+static struct dentry *rprm_dbg;
+
 static struct rprm_res *__find_res_by_name(const char *name)
 {
 	struct rprm_res *res;
@@ -556,7 +559,8 @@ static int rprm_probe(struct rpmsg_channel *rpdev)
 {
 	struct rprm *rprm;
 	struct rprm_ack ack;
-	struct rproc *rproc = vdev_to_rproc(rpdev->vrp->vdev);
+	struct device *dev = &rpdev->dev;
+	struct device *rproc_dev = dev->parent->parent;
 	char name[MAX_DENTRY_SIZE];
 	int ret = 0;
 
@@ -577,13 +581,14 @@ static int rprm_probe(struct rpmsg_channel *rpdev)
 	rprm->rpdev = rpdev;
 	dev_set_drvdata(&rpdev->dev, rprm);
 
-	snprintf(name, MAX_DENTRY_SIZE, "resmgr-%s", dev_name(&rpdev->dev));
+	snprintf(name, MAX_DENTRY_SIZE, "%s-%s", dev_name(rproc_dev),
+						dev_name(&rpdev->dev));
 	name[MAX_DENTRY_SIZE - 1] = '\0';
 	/*
 	 * Create a debug entry in the same rproc directory so that we can know
 	 * which remote proc is using this resmgr connection
 	 */
-	rprm->dentry = debugfs_create_file(name, 0400, rproc->dbg_dir, rprm,
+	rprm->dentry = debugfs_create_file(name, 0400, rprm_dbg, rprm,
 							&rprm_dbg_ops);
 out:
 	/* send a message back to ack the connection */
@@ -634,12 +639,21 @@ static struct rpmsg_driver rprm_driver = {
 
 static int __init rprm_init(void)
 {
+	if (debugfs_initialized()) {
+		rprm_dbg = debugfs_create_dir(KBUILD_MODNAME, NULL);
+		if (!rprm_dbg)
+			pr_err("can't create rprm debugfs dir\n");
+	}
+
 	return register_rpmsg_driver(&rprm_driver);
 }
 module_init(rprm_init);
 
 static void __exit rprm_fini(void)
 {
+	if (rprm_dbg)
+		debugfs_remove(rprm_dbg);
+
 	unregister_rpmsg_driver(&rprm_driver);
 }
 module_exit(rprm_fini);
