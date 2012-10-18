@@ -1790,7 +1790,7 @@ static struct omap_hwmod omap54xx_iss_hwmod = {
 	.clkdm_name	= "cam_clkdm",
 	.mpu_irqs	= omap54xx_iss_irqs,
 	.sdma_reqs	= omap54xx_iss_sdma_reqs,
-	.main_clk	= "dpll_core_h22x2_ck",
+	.main_clk	= "iss_fck",
 	.prcm = {
 		.omap4 = {
 			.clkctrl_offs = OMAP54XX_CM_CAM_ISS_CLKCTRL_OFFSET,
@@ -4911,11 +4911,21 @@ static struct omap_hwmod_ocp_if omap54xx_l3_main_2__ipu = {
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
 };
 
+static struct omap_hwmod_addr_space omap54xx_iss_addrs[] = {
+	{
+		.pa_start       = 0x52000000,
+		.pa_end         = 0x5203ffff,
+		.flags          = ADDR_TYPE_RT
+	},
+	{ }
+};
+
 /* l3_main_2 -> iss */
 static struct omap_hwmod_ocp_if omap54xx_l3_main_2__iss = {
 	.master		= &omap54xx_l3_main_2_hwmod,
 	.slave		= &omap54xx_iss_hwmod,
 	.clk		= "l3_div_ck",
+	.addr		= omap54xx_iss_addrs,
 	.user		= OCP_USER_MPU | OCP_USER_SDMA,
 };
 
@@ -5944,7 +5954,7 @@ static struct omap_hwmod_ocp_if *omap54xx_hwmod_ocp_ifs[] __initdata = {
 	&omap54xx_gpu__l3_main_2,
 	&omap54xx_hsi__l3_main_2,
 	&omap54xx_ipu__l3_main_2,
-	//&omap54xx_iss__l3_main_2,
+	&omap54xx_iss__l3_main_2,
 	&omap54xx_iva__l3_main_2,
 	&omap54xx_l3_main_1__l3_main_2,
 	&omap54xx_l4_cfg__l3_main_2,
@@ -6006,7 +6016,7 @@ static struct omap_hwmod_ocp_if *omap54xx_hwmod_ocp_ifs[] __initdata = {
 	&omap54xx_l4_per__i2c4,
 	&omap54xx_l4_per__i2c5,
 	&omap54xx_l3_main_2__ipu,
-	//&omap54xx_l3_main_2__iss,
+	&omap54xx_l3_main_2__iss,
 	&omap54xx_iva__sl2if,
 	&omap54xx_l3_main_2__iva,
 	&omap54xx_l4_wkup__kbd,
